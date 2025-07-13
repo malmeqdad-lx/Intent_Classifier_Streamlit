@@ -1,0 +1,376 @@
+# Import necessary libraries
+# streamlit: For building the web UI (simple forms, tabs, buttons)
+# sentence_transformers: For embedding utterances and intents (semantic vectors)
+# util: Helper for cosine similarity (measures how similar two vectors are)
+# json: To load/save intents from a file
+# os: To check if the intents file exists
+import streamlit as st
+from sentence_transformers import SentenceTransformer, util
+import json
+import os
+
+# Load the embedding model
+# This is a lightweight transformer model (MiniLM) pre-trained for semantic similarity.
+# It turns text into vectors (numbers representing meaning) for comparison.
+# Downloads automatically on first run; no internet needed after.
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Define the file where intents are stored
+# JSON format: {"IntentName": "Description of the intent for embedding"}
+# Updated to use the new file name provided by the user
+INTENTS_FILE = 'vanguard_intents.json'
+
+# Load intents from file or use the full provided data if file doesn't exist
+# The full intents are based on the user's uploaded JSON (approximately 250 entries).
+# Descriptions help capture semantic nuances; you can edit them via the UI.
+if os.path.exists(INTENTS_FILE):
+    with open(INTENTS_FILE, 'r') as f:
+        intents = json.load(f)
+else:
+    # Full intents from the user's JSON (initialized if file missing)
+    intents = {
+        "401k": "Handles general inquiries about 401(k) retirement plans, including questions about plan details, contributions, loans, and general 401(k) information. This is a parent intent for broader 401(k) topics, while more specific 401(k) actions have dedicated child intents.",
+        "401k_Transfer": "Specifically handles requests to transfer assets into or out of a 401(k) plan, including rollovers from other 401(k) plans and transfers between 401(k) providers. This is a child intent of the broader 401(k) category with focus on asset movement.",
+        "403b": "Handles inquiries about 403(b) retirement plans, which are similar to 401(k) plans but specifically for employees of public schools, tax-exempt organizations, and certain ministers. Covers contributions, distributions, and plan-specific information.",
+        "Access_Password": "Handles requests related to account password issues, including password resets, password recovery, forgotten passwords, and password change requests for online account access.",
+        "Access_Request": "Manages requests for account access, including new user registration, access to specific account features, permission requests, and general account access inquiries that don't relate to passwords or security questions.",
+        "Access_Security": "Handles security-related access issues, including security questions, two-factor authentication, account lockouts, security verification, and other authentication-related inquiries beyond basic password issues.",
+        "Account": "A broad parent intent that handles general account-related inquiries, including questions about account types, account information, general account management, and account-related discussions that don't fall into more specific account sub-categories.",
+        "AccountMaintenance": "Handles routine account maintenance tasks and requests, including account updates, maintenance schedules, account servicing, and ongoing account management activities.",
+        "Account_Activity": "Specifically manages inquiries about account activity, including transaction history, account movements, activity statements, recent transactions, and tracking account actions over time.",
+        "Account_Brokerage": "Handles inquiries specific to brokerage accounts, including brokerage account features, trading capabilities, brokerage account types, and brokerage-specific services that differ from retirement accounts.",
+        "Account_Change": "Manages requests to make changes to existing accounts, including account modifications, account updates, changing account settings, and account alteration requests that aren't address or beneficiary changes.",
+        "Account_Close": "Handles requests to close or terminate accounts, including account closure procedures, closing account requirements, final distributions, and account termination processes.",
+        "Account_Hold": "Manages inquiries about account holds, restrictions, freezes, or limitations placed on accounts, including hold removal requests and explanations of account restrictions.",
+        "Account_Status": "Handles inquiries about current account status, including account standing, account conditions, account health, pending actions, and general status verification requests.",
+        "Account_Verify": "Manages account verification requests, including identity verification, account ownership confirmation, account validation, and verification of account information or documents.",
+        "Address": "A parent intent that handles general address-related inquiries, including questions about mailing addresses, address requirements, and address-related topics that aren't specific change requests.",
+        "Address_Change": "A child intent of Address that specifically handles requests to update or change existing addresses, including mailing address changes, residential address updates, and address modification requests. Distinct from requests for Vanguard's address.",
+        "Annuity": "Handles inquiries about annuity products, including immediate annuities, deferred annuities, annuity rates, annuity payments, and annuity-related investment options and services.",
+        "AssetAllocation_Change": "Handles requests to modify existing asset allocation strategies, including changing investment mix, rebalancing preferences, and altering current asset distribution across investment options.",
+        "AssetAllocation_Mix": "Manages inquiries about asset allocation strategies and investment mix recommendations, including understanding current allocation, optimal mix discussions, and asset allocation principles.",
+        "AssetAllocation_Rebalance": "Specifically handles rebalancing requests and inquiries, including automatic rebalancing, manual rebalancing triggers, rebalancing frequency, and portfolio rebalancing strategies.",
+        "Assets_Transfer": "A broad parent intent for transferring assets between accounts or institutions, including general asset movement inquiries and transfer-related questions that don't fall into more specific transfer categories.",
+        "Authorization": "A parent intent that handles general authorization requests and inquiries, including permission grants, authorization procedures, and authorization-related topics that aren't specifically power of attorney.",
+        "Authorization_POA": "A child intent that specifically handles Power of Attorney authorization requests, including POA setup, POA documentation, POA permissions, and POA-related account access issues.",
+        "Automatic": "A parent intent for general automatic service inquiries, including questions about automated features, automatic service capabilities, and general automation-related topics.",
+        "Automatic_Investment": "A child intent that specifically handles automatic investment plans, including systematic investment setup, automatic contribution schedules, and automated investment management.",
+        "Automatic_Service": "Handles various automated services beyond investments and transfers, including automatic account maintenance, automated communications, and other automatic service features.",
+        "Automatic_Transfer": "Manages automatic transfer arrangements, including scheduled transfers between accounts, automatic fund movements, and recurring transfer setups.",
+        "Automatic_Withdrawal": "Handles automatic withdrawal plans, including systematic withdrawal arrangements, scheduled distributions, and automatic payout setups from retirement or investment accounts.",
+        "Balance": "Handles inquiries about account balances, including current balance verification, balance history, balance statements, and balance-related questions across all account types.",
+        "Bank": "A parent intent for general banking-related inquiries, including bank account connections, banking relationships, and general banking topics that don't fall into specific banking subcategories.",
+        "Bank_Authentication": "A child intent that specifically handles bank account authentication processes, including bank verification, linking bank accounts, and authentication procedures for bank connections.",
+        "Bank_Transfer": "Manages transfers between Vanguard accounts and external bank accounts, including ACH transfers, electronic fund transfers, and bank-to-Vanguard account movements.",
+        "Beneficiary": "Handles beneficiary-related inquiries, including beneficiary designations, beneficiary changes, beneficiary information, and beneficiary-related account features.",
+        "Bonds": "A parent intent for general bond-related inquiries, including bond investments, bond types, bond information, and general bond investment topics.",
+        "Bonds_Trade": "A child intent that specifically handles bond trading activities, including buying bonds, selling bonds, bond trading procedures, and bond transaction-related inquiries.",
+        "Brokerage_Transfer": "Handles transfers specific to brokerage accounts, including ACATS transfers, brokerage-to-brokerage transfers, and stock/security transfers between brokerage institutions.",
+        "Buy": "Handles general purchase requests and inquiries, including buying investments, purchase procedures, buy orders, and general purchasing-related topics across various investment types.",
+        "COO": "A parent intent for Change of Ownership (COO) requests, handling general ownership change inquiries and procedures that don't fall into specific COO subcategories.",
+        "COO_AddRemove": "Handles adding or removing owners from accounts, including joint account modifications, owner additions, owner removals, and ownership structure changes.",
+        "COO_Consolidate": "Manages account consolidation requests related to ownership changes, including merging accounts under new ownership and consolidation procedures during ownership transitions.",
+        "COO_Custodian": "Handles custodian-related ownership changes, including custodial account modifications, custodian appointments, custodian removals, and custodial relationship changes.",
+        "COO_DeathReport": "Manages the reporting of account holder deaths and related immediate procedures, including death notifications and initial death-related account actions.",
+        "COO_Divorce": "Handles ownership changes due to divorce, including asset division, account splitting, divorce-related ownership transfers, and divorce decree implementations.",
+        "COO_DueToDeath": "Manages ownership changes that occur after death reporting, including estate transfers, inheritance procedures, and post-death ownership transitions.",
+        "COO_Gift": "Handles ownership changes related to gifting assets, including gift transfers, gift tax implications, and gifting procedures for account assets.",
+        "COO_TransferDeath": "Specifically manages transfer-on-death (TOD) arrangements and beneficiary transfers that occur automatically upon death, distinct from estate-based transfers.",
+        "CashProducts": "Handles inquiries about cash-based investment products, including money market funds, cash management accounts, and cash equivalent investment options.",
+        "Cd": "A parent intent for Certificate of Deposit (CD) inquiries, including CD products, CD terms, CD rates, and general CD-related information.",
+        "Cd_Trade": "A child intent that specifically handles CD trading activities, including purchasing CDs, CD redemptions, CD transactions, and CD trading procedures.",
+        "Check": "A parent intent for general check-related inquiries, including check services, check information, and check-related topics that don't fall into specific check subcategories.",
+        "Check_Book": "Handles requests for checkbooks, check ordering for checking accounts, checkbook replacement, and checkbook-related services.",
+        "Check_Copy": "Manages requests for check copies, including duplicate checks, check images, check records, and check copy services for record-keeping.",
+        "Check_NotReceived": "Handles inquiries about checks that haven't been received, including missing checks, delayed check delivery, and check delivery issues.",
+        "Check_Order": "Manages check ordering processes, including ordering new checks, custom check orders, and check ordering procedures for account holders.",
+        "Check_Send": "Handles requests to send checks, including check disbursements, check payments, and sending checks from accounts to third parties.",
+        "Check_Verify": "Manages check verification processes, including check authenticity, check clearing verification, and check validation procedures.",
+        "Check_Writing": "Handles inquiries about check writing procedures, check writing capabilities, and general check writing services for account holders.",
+        "Confirmation": "A parent intent for general confirmation requests and inquiries, including transaction confirmations, action confirmations, and confirmation-related topics.",
+        "ConfirmationNo": "Handles inquiries about confirmation numbers, including confirmation number lookup, confirmation number verification, and confirmation number-related questions.",
+        "Contribute": "A parent intent for general contribution inquiries, including contribution questions, contribution procedures, and contribution-related topics across various account types.",
+        "Contribute_Change": "Handles requests to modify existing contribution arrangements, including contribution amount changes, contribution frequency changes, and contribution modification requests.",
+        "Contribute_Excess": "Manages inquiries about excess contributions, including over-contribution issues, excess contribution corrections, and excess contribution removal procedures.",
+        "Contribute_Recharacterization": "Handles contribution recharacterization requests, including converting traditional IRA contributions to Roth, recharacterization procedures, and contribution type changes.",
+        "Deposit": "A parent intent for general deposit inquiries, including deposit procedures, deposit information, and deposit-related topics that don't fall into specific deposit subcategories.",
+        "Deposit_Direct": "A child intent that specifically handles direct deposit arrangements, including payroll direct deposits, direct deposit setup, and direct deposit modifications.",
+        "Deposit_Slip": "Manages deposit slip requests and inquiries, including deposit slip procedures, deposit documentation, and deposit slip-related services.",
+        "Distribute": "A parent intent for general distribution inquiries, including distribution requests, distribution procedures, and distribution-related topics across various account types.",
+        "Distribute_Change": "Handles requests to modify existing distribution arrangements, including distribution amount changes, distribution schedule changes, and distribution modification requests.",
+        "Distribute_Early": "Manages early distribution requests, including early withdrawal penalties, early distribution procedures, and premature distribution inquiries for retirement accounts.",
+        "Distribute_Hardship": "Handles hardship distribution requests, including hardship withdrawal documentation, hardship distribution eligibility, and hardship-related distribution procedures.",
+        "Distribute_QCD": "Manages Qualified Charitable Distribution (QCD) requests, including QCD procedures, QCD eligibility, and charitable distribution arrangements from IRAs.",
+        "Distribute_RetirementClose": "Handles distributions related to retirement account closures, including final distributions, account closure distributions, and retirement account termination procedures.",
+        "Dividend": "A parent intent for general dividend-related inquiries, including dividend payments, dividend information, and dividend-related investment topics.",
+        "Dividend_Change": "Handles requests to modify dividend arrangements, including dividend reinvestment changes, dividend payout modifications, and dividend preference changes.",
+        "ESA": "Handles inquiries about Education Savings Accounts (Coverdell ESA), including ESA contributions, ESA distributions, ESA eligibility, and ESA-related educational funding topics.",
+        "ETF": "A parent intent for general Exchange-Traded Fund (ETF) inquiries, including ETF information, ETF products, and general ETF-related investment topics.",
+        "ETF_Trade": "A child intent that specifically handles ETF trading activities, including buying ETFs, selling ETFs, ETF trading procedures, and ETF transaction-related inquiries.",
+        "Email": "A parent intent for general email-related inquiries, including email communications, email services, and email-related topics that don't fall into specific email subcategories.",
+        "Email_DeliveryPreferences": "Handles email delivery preference settings, including email notification preferences, email frequency settings, and email delivery customization options.",
+        "Email_OptOut": "Manages email opt-out requests, including unsubscribing from emails, email preference removal, and email communication cessation requests.",
+        "Email_Received": "Handles inquiries about emails received from Vanguard, including email verification, email content questions, and received email-related topics.",
+        "Estate": "Handles estate-related inquiries, including estate planning, estate account management, estate distributions, and estate-related account services.",
+        "Exchange": "Handles investment exchange requests and inquiries, including fund exchanges, investment swaps, and exchange procedures between different investment options.",
+        "Fees": "Handles inquiries about fees, including account fees, transaction fees, fee schedules, fee explanations, and fee-related questions across all services.",
+        "FixedIncome": "Handles inquiries about fixed income investments, including bonds, CDs, fixed income funds, and fixed income investment strategies and products.",
+        "Flagship": "Handles inquiries about Vanguard's Flagship services, including premium service tiers, Flagship benefits, and high-net-worth client services.",
+        "Forms": "A parent intent for general form-related inquiries, including form requests, form completion, and form-related topics that don't require signature guarantees.",
+        "Forms_SignatureGuarantee": "A child intent that specifically handles forms requiring signature guarantees, including signature guarantee procedures, signature guarantee requirements, and guaranteed signature services.",
+        "Funds": "A parent intent for general mutual fund inquiries, including fund information, fund products, and general fund-related investment topics that don't fall into specific fund subcategories.",
+        "Funds_Change": "Handles requests to change fund investments, including fund switches, fund allocation changes, and fund selection modifications.",
+        "Funds_Close": "Manages inquiries about fund closures, including closed funds, fund terminations, and fund closure procedures that affect investments.",
+        "Funds_Exchange": "Handles fund exchange procedures, including swapping between funds, fund exchange processes, and moving investments between different fund options.",
+        "Funds_Insufficient": "Manages inquiries about insufficient funds, including insufficient balance issues, insufficient funds for transactions, and insufficient fund resolution procedures.",
+ "Funds_Maintenance": "Handles fund maintenance-related inquiries, including fund updates, fund maintenance schedules, and fund maintenance communications.",
+        "Funds_Redeem": "Manages fund redemption requests, including selling fund shares, fund redemption procedures, and fund liquidation requests.",
+        "Funds_Trade": "Handles fund trading activities, including buying funds, selling funds, fund trading procedures, and fund transaction-related inquiries.",
+        "HSA": "Handles inquiries about Health Savings Accounts (HSA), including HSA contributions, HSA distributions, HSA eligibility, and HSA-related healthcare funding topics.",
+        "IRA": "A parent intent for general Individual Retirement Account (IRA) inquiries, including IRA information, IRA types, and general IRA-related topics that don't fall into specific IRA subcategories.",
+        "IRA_Contribute": "A child intent that specifically handles IRA contribution requests, including traditional IRA contributions, contribution limits, contribution procedures, and IRA funding activities.",
+        "IRA_Open": "Handles IRA account opening procedures, including new IRA applications, IRA setup processes, and IRA account establishment.",
+        "IRA_Trade": "Manages trading activities within IRA accounts, including buying and selling investments in IRAs, IRA trading procedures, and IRA investment transactions.",
+        "IRA_Transfer": "Handles IRA transfer procedures, including IRA rollovers, IRA-to-IRA transfers, and moving IRA assets between institutions.",
+        "IRA_Withdraw": "Manages IRA withdrawal requests, including IRA distributions, early withdrawals, and IRA payout procedures.",
+        "Inherited": "A parent intent for general inherited account inquiries, including inherited account procedures, inheritance-related topics, and inherited asset management.",
+        "InheritedIRA": "A child intent that specifically handles Inherited IRA accounts, including inherited IRA rules, inherited IRA distributions, and inherited IRA management procedures.",
+        "Inherited_Transfer": "Handles transfers of inherited assets, including inherited account transfers, inheritance-related asset movements, and inherited asset distribution procedures.",
+        "Inquiry": "A general intent for miscellaneous inquiries that don't fall into more specific categories, including general questions, information requests, and broad inquiry topics.",
+        "Investment": "A parent intent for general investment inquiries, including investment information, investment strategies, and general investment-related topics that don't fall into specific investment subcategories.",
+        "Investment_AdmiralShares": "A child intent that specifically handles Admiral Shares inquiries, including Admiral Shares eligibility, Admiral Shares conversion, and Admiral Shares benefits.",
+        "Investment_Change": "Handles requests to change investment selections, including investment switches, investment modifications, and investment reallocation requests.",
+        "Investment_Obligations": "Manages inquiries about government obligations and investments, including Treasury securities, government bonds, and obligation-related investment products.",
+        "Letter": "Handles inquiries about letters and written communications, including letter requests, letter explanations, and correspondence-related topics.",
+        "Literature": "Handles requests for investment literature, including prospectuses, fund reports, investment materials, and educational literature requests.",
+        "Loan": "Handles loan-related inquiries, including 401(k) loans, loan applications, loan payments, and loan procedures for retirement accounts.",
+        "MoneyMarket": "A parent intent for money market account and fund inquiries, including money market rates, money market products, and general money market investment topics.",
+        "MoneyMarket_Trade": "A child intent that specifically handles money market trading activities, including money market fund transactions, money market purchases, and money market trading procedures.",
+        "Money_Transfer": "Handles general money transfer requests, including transferring money between accounts, money movement procedures, and monetary transfer-related inquiries.",
+        "MutualFund_Trade": "Handles mutual fund trading activities, including mutual fund purchases, mutual fund sales, and mutual fund transaction procedures.",
+        "Open": "A parent intent for general account opening inquiries, including new account applications and account opening procedures that don't fall into specific account type opening subcategories.",
+        "Open_Application": "A child intent that specifically handles account opening applications, including application procedures, application status, and application-related inquiries.",
+        "Options": "A parent intent for options trading inquiries, including options information, options strategies, and general options-related investment topics.",
+        "Options_Trade": "A child intent that specifically handles options trading activities, including buying options, selling options, options trading procedures, and options transaction-related inquiries.",
+        "Order": "Handles general order inquiries, including order status, order procedures, order modifications, and order-related topics across various transaction types.",
+        "PAS": "A parent intent for Personal Advisor Services inquiries, including advisor services, advisory relationships, and general PAS-related topics.",
+        "PAS_Appointment": "A child intent that specifically handles scheduling appointments with Personal Advisor Services, including appointment booking, appointment changes, and appointment-related inquiries.",
+        "Payment": "A parent intent for general payment inquiries, including payment procedures, payment information, and payment-related topics that don't fall into specific payment subcategories.",
+        "Payment_Cancel": "A child intent that specifically handles payment cancellation requests, including stopping payments, payment reversal requests, and payment cancellation procedures.",
+        "Pension": "Handles pension-related inquiries, including pension rollovers, pension distributions, pension transfers, and pension account management.",
+        "Performance": "A parent intent for general investment performance inquiries, including performance reports, performance analysis, and general performance-related topics.",
+        "Performance_Interest": "A child intent that specifically handles interest-related performance inquiries, including interest rates, interest earnings, and interest-related performance performance.",
+        "Performance_ProxyVoting": "Handles proxy voting proxy inquiries, including proxy voting procedures, proxy voting records, and shareholder voting-related topics.",
+        "PersonalInfo": "A parent intent for general personal information inquiries, including personal information updates, personal information verification, and general personal data topics.",
+        "PersonalInfo_AccountNumber": "A child intent that specifically handles account number inquiries, including account number verification, account number changes, and account number-related questions.",
+        "PersonalInfo_NameChange": "Handles name change requests, including legal name changes, name updates, and name modification procedures for accounts.",
+        "PersonalInfo_PinNumber": "Manages PIN number inquiries, including PIN resets, PIN changes, PIN verification, and PIN-related access issues.",
+        "PersonalInfo_SSNorEIN": "Handles Social Security Number (SSN) or Employer Identification Number (EIN) inquiries, including SSN verification, EIN updates, and tax ID-related questions.",
+        "Problem": "Handles general problem reporting and resolution, including account issues, service problems, error reporting, and problem resolution requests.",
+        "Prospectus": "Handles prospectus requests and inquiries, including fund prospectuses, investment prospectuses, and prospectus-related investment documentation.",
+        "Quotes": "Handles investment quote requests, including stock quotes, fund prices, investment pricing, and quote-related inquiries.",
+        "Rep": "A parent intent for general representative inquiries, including speaking with representatives, representative services, and general representative-related topics.",
+        "Rep_AgentBroker": "A child intent that specifically handles agent or broker representative requests, including specialized advisor consultations and broker-related service requests.",
+        "ReportFraud": "Handles fraud reporting requests, including suspected fraud, fraud alerts, fraud prevention, and fraud-related security concerns.",
+        "RequestRmdStatus": "Handles requests for Required Minimum Distribution (RMD) status, including RMD calculations, RMD compliance status, and RMD-related inquiries.",
+        "Resolution": "Handles resolution requests for various issues, including complaint resolution, problem resolution, and resolution-related inquiries.",
+        "Retirement": "A parent intent for general retirement-related inquiries, including retirement planning, retirement accounts, and general retirement topics that don't fall into specific retirement subcategories.",
+        "Retirement_Change": "Handles requests to change retirement arrangements, including retirement plan changes, retirement contribution modifications, and retirement account changes.",
+        "Retirement_Conversion": "Manages retirement account conversion requests, including Roth conversions, retirement account type conversions, and conversion procedures.",
+        "ReturnCall": "Handles requests for return calls, including callback scheduling, return call requests, and callback-related inquiries.",
+        "Rmd": "A child intent under retirement that specifically handles Required Minimum Distribution (RMD) inquiries, including RMD calculations, RMD procedures, RMD compliance, and RMD distribution requests. More specific than general retirement topics.",
+        "Rollover": "A parent intent for rollover inquiries, including retirement account rollovers, rollover procedures, and general rollover-related topics. Distinct from transfers as rollovers typically involve tax-advantaged accounts.",
+        "Rollover_Indirect": "A child intent that specifically handles indirect rollover procedures, including 60-day rollover rules, indirect rollover processes, and indirect rollover compliance.",
+        "RothIRA": "A parent intent for Roth IRA inquiries, including Roth IRA information, Roth IRA rules, and general Roth IRA-related topics that don't fall into specific Roth IRA subcategories.",
+        "RothIRA_Contribute": "A child intent that specifically handles Roth IRA contribution requests, including Roth contribution limits, Roth contribution procedures, and Roth IRA funding activities.",
+        "RothIRA_Transfer": "Handles Roth IRA transfer procedures, including Roth IRA rollovers, Roth-to-Roth transfers, and moving Roth IRA assets between institutions.",
+        "SBS": "A parent intent for Small Business Services inquiries, including small business retirement plans, business account services, and general SBS-related topics.",
+        "SBS_Contribute": "A child intent that specifically handles Small Business Services contribution requests, including business plan contributions and business account funding activities.",
+        "SBS_Trade": "Handles trading activities within Small Business Services accounts, including business account trading procedures and business investment transactions.",
+        "SBS_Transfer": "Manages Small Business Services transfer procedures, including business account transfers and business asset movement procedures.",
+        "SBS_Withdraw": "Handles Small Business Services withdrawal requests, including business account distributions and business withdrawal procedures.",
+        "Sell": "Handles general selling requests and inquiries, including selling investments, sale procedures, sell orders, and general selling-related topics across various investment types.",
+        "SepIRA": "A parent intent for SEP-IRA inquiries, including SEP-IRA information, SEP-IRA rules, and general SEP-IRA-related topics for small business retirement plans.",
+        "SepIRA_Open": "A child intent that specifically handles SEP-IRA account opening procedures, including SEP-IRA setup, SEP-IRA applications, and SEP-IRA establishment.",
+        "Shares": "A parent intent for general share-related inquiries, including share information, share procedures, and general share-related topics that don't fall into specific share subcategories.",
+        "Shares_Convert": "Handles share conversion requests, including share class conversions, share type changes, and share conversion procedures between different share classes.",
+        "Shares_Redeem": "Manages share redemption requests, including redeeming shares for cash, share liquidation procedures, and share redemption processes.",
+        "Shares_Transfer": "Handles share transfer procedures, including transferring shares between accounts, share movement processes, and share transfer-related inquiries.",
+        "SimpleIRA_OpenClose": "Handles Simple IRA account opening and closing procedures, including Simple IRA setup, Simple IRA termination, and Simple IRA account lifecycle management.",
+        "SimpleIRA_REAL": "Handles actual Simple IRA account inquiries and procedures, including Simple IRA management, Simple IRA operations, and Simple IRA account services.",
+        "Spanish": "Handles requests for Spanish language services, including Spanish-speaking representatives, Spanish documentation, and Spanish language support.",
+        "Statements": "A parent intent for general statement inquiries, including statement requests, statement information, and statement-related topics that don't fall into specific statement subcategories.",
+        "Statements_ProofOfFunds": "A child intent that specifically handles proof of funds statement requests, including account verification statements, fund verification letters, and proof of funds documentation.",
+        "Status_Transfer_REAL": "Handles real transfer status inquiries, including actual transfer progress, transfer status verification, and transfer completion status.",
+        "Status_Transaction": "Handles transaction status inquiries, including transaction progress, transaction verification, and transaction completion status.",
+        "StockMarketUpdate": "Handles requests for stock market updates, including market news, market performance, market conditions, and general market information.",
+        "StockQuotesGeneral": "Handles general stock quote requests, including stock prices, stock information, and general stock quote-related inquiries.",
+        "Stocks": "A parent intent for general stock inquiries, including stock information, stock investments, and general stock-related topics that don't fall into specific stock subcategories.",
+        "Stocks_Close": "Handles stock position closing requests, including selling all stock positions, stock position liquidation, and stock position termination.",
+        "Stocks_Trade": "A child intent that specifically handles stock trading activities, including buying stocks, selling stocks, stock trading procedures, and stock transaction-related inquiries.",
+        "Stocks_Transfer": "Handles stock transfer procedures, including transferring stock positions between accounts, stock movement processes, and stock transfer-related inquiries.",
+        "TakeOneTimeDistribution": "Handles one-time distribution requests, including single distribution payments, one-off withdrawal requests, and non-recurring distribution procedures.",
+        "TakeRmd": "Handles taking Required Minimum Distribution (RMD) requests, including RMD processing, RMD distribution procedures, and RMD compliance actions.",
+        "Tax": "A parent intent for general tax-related inquiries, including tax information, tax procedures, and general tax-related topics that don't fall into specific tax document subcategories.",
+        "Tax_1099": "A child intent that specifically handles Form 1099 tax document inquiries, including 1099 forms, 1099 information, and general 1099-related tax documentation.",
+        "Tax_1099B": "Handles Form 1099-B tax document inquiries, including brokerage transaction reporting, 1099-B forms, and broker transaction tax documentation.",
+        "Tax_1099Div": "Handles Form 1099-DIV tax document inquiries, including dividend reporting, 1099-DIV forms, and dividend-related tax documentation.",
+        "Tax_1099R": "Handles Form 1099-R tax document inquiries, including retirement distribution reporting, 1099-R forms, and retirement distribution tax documentation.",
+        "Tax_5498": "Handles Form 5498 tax document inquiries, including IRA contribution reporting, 5498 forms, and IRA-related tax documentation.",
+        "Tax_CapitalGains": "Handles capital gains tax inquiries, including capital gains reporting, capital gains calculations, and capital gains-related tax topics.",
+        "Tax_CostBasis": "Handles cost basis tax inquiries, including cost basis reporting, cost basis calculations, and cost basis-related tax information.",
+        "Tax_Deduction": "Handles tax deduction inquiries, including deductible contributions, tax deduction eligibility, and deduction-related tax topics.",
+        "Tax_FormTax": "Handles various tax form inquiries, including tax form requests, tax form completion, and general tax form-related topics.",
+        "Tax_Record": "Handles tax record requests, including tax record maintenance, tax record retrieval, and tax record-related inquiries.",
+        "Tax_TaxID": "Handles Tax ID inquiries, including Tax Identification Number verification, Tax ID changes, and Tax ID-related account information.",
+        "Tax_TurboTax": "Handles TurboTax integration inquiries, including TurboTax data import, TurboTax compatibility, and TurboTax-related tax preparation topics.",
+        "Tax_W2": "Handles Form W-2 tax document inquiries, including W-2 forms, W-2 information, and employer-related tax documentation.",
+        "Tax_W4R": "Handles Form W-4R tax document inquiries, including withholding elections for retirement distributions, W-4R forms, and retirement withholding preferences.",
+        "Tax_W9": "Handles Form W-9 tax document inquiries, including taxpayer identification verification, W-9 forms, and taxpayer information certification.",
+        "Tax_k1": "Handles Form K-1 tax document inquiries, including partnership/S-corp reporting, K-1 forms, and pass-through entity tax documentation.",
+        "TechSupport": "A parent intent for general technical support inquiries, including technical issues, technology problems, and general tech support topics that don't fall into specific tech subcategories.",
+        "TechSupport_Online": "A child intent that specifically handles online technical support, including website issues, online platform problems, and internet-related technical support.",
+        "TechSupport_Open": "Handles open technical support requests, including ongoing tech issues, unresolved technical problems, and open tech support cases.",
+        "TechSupport_QuickenSupport": "Handles Quicken software support inquiries, including Quicken integration, Quicken connectivity, and Quicken-related technical issues.",
+        "TechSupport_Webcast": "Handles webcast technical support, including webcast access issues, webcast technical problems, and webcast-related tech support.",
+        "Trade_Cancel": "Handles trade cancellation requests, including order cancellations, trade reversal requests, and trade cancellation procedures.",
+        "Trade_Change": "Handles requests to change existing trades, including trade modifications, order changes, and trade alteration procedures.",
+        "Trade_REAL": "Handles actual trading inquiries and procedures, including real trade execution, live trading operations, and actual trade-related services.",
+        "Trade_Refund": "Handles trade refund requests, including trade reversal refunds, transaction refunds, and trade-related refund procedures.",
+        "Transaction_REAL": "Handles actual transaction inquiries and procedures, including real transaction processing, live transaction operations, and actual transaction-related services.",
+        "Transfer": "A parent intent for general transfer inquiries, including asset transfers, account transfers, and general transfer-related topics. Broader than rollover as it includes non-retirement account transfers.",
+        "Transfer_Account": "A child intent that specifically handles account-to-account transfers, including moving assets between accounts, account transfer procedures, and inter-account asset movement.",
+        "Transfer_Balance": "Handles balance transfer requests, including transferring account balances, balance movement procedures, and balance transfer-related inquiries.",
+        "Transfer_ElectronicFund": "Handles electronic fund transfer requests, including EFT procedures, electronic money movement, and electronic transfer-related inquiries.",
+        "Transfer_Form": "Handles transfer form requests and inquiries, including transfer documentation, transfer form completion, and transfer form-related procedures.",
+        "Transfer_Wire": "Handles wire transfer requests, including domestic wire transfers, international wire transfers, and wire transfer procedures.",
+        "TransitionTeam": "Handles inquiries about transition teams, including transition services, transition support, and transition-related assistance for account changes.",
+        "Trust_Change": "Handles trust account change requests, including trust modifications, trust account updates, and trust-related account changes.",
+        "Trust_Open": "Handles trust account opening procedures, including trust setup, trust applications, and trust account establishment.",
+        "Trust_REAL": "Handles actual trust account inquiries and procedures, including trust management, trust operations, and trust account services.",
+        "UTMAUGMA": "Handles Uniform Transfers to Minors Act (UTMA) and Uniform Gifts to Minors Act (UGMA) account inquiries, including custodial accounts, minor account management, and UTMA/UGMA procedures.",
+        "VanguardInfo_Compliance": "Handles inquiries about Vanguard's compliance information, including regulatory compliance, compliance policies, and compliance-related questions.",
+        "VanguardInfo_FaxPhone": "Handles requests for Vanguard's fax numbers and phone numbers, including contact information, department phone numbers, and communication contact details.",
+        "VanguardInfo_MailingAddress": "Handles requests for Vanguard's mailing addresses, including corporate addresses, department mailing addresses, and correspondence addresses.",
+        "VanguardInfo_OfficeHours": "Handles inquiries about Vanguard's office hours, including business hours, customer service hours, and department operating hours.",
+        "VanguardInfo_RoutingNumber": "Handles requests for Vanguard's routing numbers, including bank routing information, ACH routing numbers, and wire routing information.",
+        "Voyager": "Handles inquiries about Vanguard's Voyager services, including premium service tiers, Voyager benefits, and high-net-worth client services.",
+        "Withdraw": "A parent intent for general withdrawal inquiries, including withdrawal requests, withdrawal procedures, and general withdrawal-related topics that don't fall into specific withdrawal subcategories. Distinct from 'distribute' which typically refers to retirement account payouts.",
+        "Withdraw_Redemption": "A child intent that specifically handles redemption-related withdrawals, including mutual fund redemptions, investment liquidations, and redemption-based withdrawal procedures.",
+        "Withholding": "A parent intent for general tax withholding inquiries, including withholding preferences, withholding information, and general withholding-related topics.",
+        "Withholding_Change": "A child intent that specifically handles withholding change requests, including tax withholding modifications, withholding percentage changes, and withholding preference updates.",
+        "i401k": "Handles inquiries about institutional 401(k) plans, including employer-sponsored 401(k) services, institutional 401(k) management, and business 401(k) plan administration."
+    }
+    # Save the full intents to file for persistence
+    with open(INTENTS_FILE, 'w') as f:
+        json.dump(intents, f, indent=4)
+
+# Pre-compute embeddings for all intent descriptions
+# This runs once at startup for efficiency; vectors stored in memory.
+# With ~250 intents, this is still efficient (takes ~2-5s on first load).
+intent_names = list(intents.keys())  # List of intent names
+intent_descs = list(intents.values())  # List of descriptions
+intent_embeddings = model.encode(intent_descs)  # Convert descriptions to vectors
+
+# Function to save changes to intents file
+# Called whenever you add/remove/edit intents.
+def save_intents():
+    with open(INTENTS_FILE, 'w') as f:
+        json.dump(intents, f, indent=4)
+
+# Main UI setup
+# Streamlit creates a web app in your browser.
+
+st.title("Vanguard Utterance Classification App")
+
+# Create two tabs: one for classification, one for managing intents
+tab1, tab2 = st.tabs(["Classify Utterances", "Manage Intents"])
+
+# Tab 1: Classify utterances
+with tab1:
+    st.subheader("Input Utterances for Classification")
+    # Radio button to choose single or batch input
+    input_type = st.radio("Select input type", ["Single Utterance", "Batch Upload"])
+    if input_type == "Single Utterance":
+        # Text area for one utterance
+        utterance = st.text_area("Enter the utterance (e.g., 'What's my IRA balance?')")
+        if st.button("Classify"):
+            if utterance.strip():  # Check if not empty
+                # Embed the utterance (convert to vector)
+                utt_embedding = model.encode(utterance)
+                # Compute similarities to all intent vectors
+                similarities = util.cos_sim(utt_embedding, intent_embeddings)[0]
+                # Find the best match (highest similarity)
+                max_index = similarities.argmax()
+                best_intent = intent_names[max_index]
+                confidence = similarities[max_index].item()  # Score between -1 and 1; typically 0-1 for similar texts
+                # Display result
+                st.success(f"Best Intent: {best_intent}")
+                st.info(f"Confidence Score: {confidence:.2f} (higher is better; based on semantic similarity)")
+            else:
+                st.warning("Please enter an utterance.")
+    
+    else:  # Batch Upload
+        # File uploader for .txt or .csv (one utterance per line)
+        uploaded_file = st.file_uploader("Upload a file (.txt or .csv, one utterance per line)", type=["txt", "csv"])
+        if uploaded_file and st.button("Classify Batch"):
+            # Read file contents
+            file_contents = uploaded_file.read().decode("utf-8")
+            utterances = [line.strip() for line in file_contents.splitlines() if line.strip()]
+            if utterances:
+                results = []
+                for utterance in utterances:
+                    # Same process as single: embed, compare, find max
+                    utt_embedding = model.encode(utterance)
+                    similarities = util.cos_sim(utt_embedding, intent_embeddings)[0]
+                    max_index = similarities.argmax()
+                    best_intent = intent_names[max_index]
+                    confidence = similarities[max_index].item()
+                    results.append({
+                        "Utterance": utterance,
+                        "Best Intent": best_intent,
+                        "Confidence": f"{confidence:.2f}"
+                    })
+                # Display as a table
+                st.table(results)
+            else:
+                st.warning("Uploaded file is empty or invalid.")
+
+# Tab 2: Manage intents (review, add, remove, modify)
+with tab2:
+    st.subheader("Review and Edit Intents")
+    # Display current intents in a list with edit/remove options
+    for intent_name in list(intents.keys()):  # Use list() to avoid runtime errors during deletion
+        col1, col2, col3 = st.columns([2, 4, 1])  # Columns for layout
+        col1.write(f"**{intent_name}**")  # Show name
+        # Text input to edit description
+        new_desc = col2.text_input("Description", intents[intent_name], key=f"desc_{intent_name}")
+        if new_desc != intents[intent_name]:
+            intents[intent_name] = new_desc
+            save_intents()
+            st.rerun()  # Refresh UI to show changes
+        # Button to remove
+        if col3.button("Remove", key=f"remove_{intent_name}"):
+            del intents[intent_name]
+            save_intents()
+            # Update embeddings after change
+            intent_names = list(intents.keys())
+            intent_descs = list(intents.values())
+            intent_embeddings = model.encode(intent_descs)
+            st.rerun()  # Refresh
+    
+    st.subheader("Add New Intent")
+    # Form to add new
+    new_name = st.text_input("Intent Name (e.g., 'NewIntent')")
+    new_desc = st.text_area("Intent Description (e.g., 'Description for semantic matching')")
+    if st.button("Add Intent") and new_name and new_desc:
+        if new_name in intents:
+            st.warning("Intent name already exists.")
+        else:
+            intents[new_name] = new_desc
+            save_intents()
+            # Update embeddings
+            intent_names = list(intents.keys())
+            intent_descs = list(intents.values())
+            intent_embeddings = model.encode(intent_descs)
+            st.rerun()  # Refresh
