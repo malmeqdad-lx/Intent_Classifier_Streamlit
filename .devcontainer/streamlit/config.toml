@@ -3,19 +3,45 @@ enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 200
 headless = true
+# Safari-specific fixes
+allowRunOnSave = false
+runOnSave = false
+fileWatcherType = "none"
+# Disable problematic features for Safari
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false
+# Safari-specific browser settings
+serverAddress = "localhost"
+serverPort = 8501
 
 [theme]
+# Use light theme as Safari has issues with some dark themes
 base = "light"
 primaryColor = "#FF6B6B"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
+font = "sans-serif"
 
 [logger]
 level = "info"
 
 [client]
+# Safari compatibility settings
 caching = true
+displayEnabled = true
+showErrorDetails = true
+
+# Safari WebSocket settings
+[global]
+# Disable features that cause Safari issues
+suppressDeprecationWarnings = true
+showWarningOnDirectExecution = false
+
+# Safari-specific development settings
+[runner]
+# Disable features that can cause Safari compatibility issues
+magicEnabled = false
+fastReruns = false
