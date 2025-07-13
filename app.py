@@ -123,7 +123,7 @@ else:
         "Funds_Close": "Manages inquiries about fund closures, including closed funds, fund terminations, and fund closure procedures that affect investments.",
         "Funds_Exchange": "Handles fund exchange procedures, including swapping between funds, fund exchange processes, and moving investments between different fund options.",
         "Funds_Insufficient": "Manages inquiries about insufficient funds, including insufficient balance issues, insufficient funds for transactions, and insufficient fund resolution procedures.",
- "Funds_Maintenance": "Handles fund maintenance-related inquiries, including fund updates, fund maintenance schedules, and fund maintenance communications.",
+        "Funds_Maintenance": "Handles fund maintenance-related inquiries, including fund updates, fund maintenance schedules, and fund maintenance communications.",
         "Funds_Redeem": "Manages fund redemption requests, including selling fund shares, fund redemption procedures, and fund liquidation requests.",
         "Funds_Trade": "Handles fund trading activities, including buying funds, selling funds, fund trading procedures, and fund transaction-related inquiries.",
         "HSA": "Handles inquiries about Health Savings Accounts (HSA), including HSA contributions, HSA distributions, HSA eligibility, and HSA-related healthcare funding topics.",
@@ -281,7 +281,7 @@ def save_intents():
 # Main UI setup
 # Streamlit creates a web app in your browser.
 
-st.title("Vanguard Utterance Classification App")
+st.title("Find my Intent")
 
 # Create two tabs: one for classification, one for managing intents
 tab1, tab2 = st.tabs(["Classify Utterances", "Manage Intents"])
