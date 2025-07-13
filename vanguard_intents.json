@@ -279,7 +279,7 @@
   
   "Quotes": "Handles investment quote requests, including stock quotes, fund prices, investment pricing, and quote-related inquiries.",
   
-  "Rep": "A parent intent for general representative inquiries, including speaking with representatives, representative services, and general representative-related topics.",
+  "Rep": "Handles all requests to speak with human representatives, customer service agents, live support staff, or real people. Includes phrases like 'transfer me to a representative', 'I want to talk to a human', 'connect me to a live agent', 'speak to someone', 'get me a person', 'customer service representative', 'human agent', 'live chat agent', 'transfer me to a human representative', 'connect me to customer service', 'I need to speak to someone'. Specifically focuses on human interaction requests, not automated systems, forms, or asset transfers.",
   
   "Rep_AgentBroker": "A child intent that specifically handles agent or broker representative requests, including specialized advisor consultations and broker-related service requests.",
   
@@ -425,7 +425,7 @@
   
   "Transfer_ElectronicFund": "Handles electronic fund transfer requests, including EFT procedures, electronic money movement, and electronic transfer-related inquiries.",
   
-  "Transfer_Form": "Handles transfer form requests and inquiries, including transfer documentation, transfer form completion, and transfer form-related procedures.",
+  "Transfer_Form": "Manages requests for transfer forms, transfer documentation, and paperwork for moving assets, funds, or accounts between financial institutions. Includes requests like 'I need a transfer form', 'transfer paperwork', 'account transfer documents', 'rollover forms', 'ACATS transfer forms'. Focuses specifically on FORMS and DOCUMENTATION for asset/account transfers, NOT requests to transfer calls to human representatives or agents.",
   
   "Transfer_Wire": "Handles wire transfer requests, including domestic wire transfers, international wire transfers, and wire transfer procedures.",
   

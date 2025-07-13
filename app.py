@@ -404,26 +404,232 @@ with tab2:
                         st.write(f"{i+1}. {item['intent']} ({item['confidence']:.3f})")
 
 # Tab 3: Manage Intents (simplified version of your existing tab)
+# Replace your Tab 3 content with this complete Manage Intents functionality
+
+# Tab 3: Fixed Manage Intents
 with tab3:
-    st.subheader("⚙️ Intent Management")
-    st.info("This is a simplified view. Use the existing management features from your original app.")
+    st.subheader("⚙️ Manage Intents")
     
-    # Quick add for fallback intents
-    st.markdown("### Quick Add Fallback Intents")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        search_term = st.text_input("🔍 Search intents:", placeholder="Type intent name or description...")
+    with col2:
+        st.metric("Total Intents", len(intents))
     
-    fallback_intents = {
-        "No_Intent_Match": "Handles utterances that don't match any specific intent category, including complaints, general dissatisfaction, requests for human agents, off-topic questions, and unrelated inquiries.",
-        "General_Complaint": "Handles general complaints, expressions of dissatisfaction, negative feedback about services, requests to speak with supervisors.",
-        "Human_Agent_Request": "Handles explicit requests to speak with a human representative, agent, or live person, including expressions of frustration with automated systems."
-    }
+    # Filter intents based on search
+    if search_term:
+        filtered_intents = {
+            k: v for k, v in intents.items() 
+            if search_term.lower() in k.lower() or search_term.lower() in v.lower()
+        }
+        st.info(f"Showing {len(filtered_intents)} of {len(intents)} intents")
+    else:
+        filtered_intents = intents
     
-    for intent_name, description in fallback_intents.items():
-        if intent_name not in intents:
-            if st.button(f"➕ Add {intent_name}"):
-                intents[intent_name] = description
-                save_intents()
-                st.success(f"Added {intent_name}")
+    # Pagination for better performance
+    items_per_page = 10
+    if 'page' not in st.session_state:
+        st.session_state.page = 0
+    
+    intent_items = list(filtered_intents.items())
+    total_pages = max(1, (len(intent_items) - 1) // items_per_page + 1)
+    
+    # Ensure page is within bounds
+    if st.session_state.page >= total_pages:
+        st.session_state.page = 0
+    
+    start_idx = st.session_state.page * items_per_page
+    end_idx = min(start_idx + items_per_page, len(intent_items))
+    
+    # Quick access for Rep and Transfer_Form intents
+    st.markdown("### 🔥 Quick Access - Priority Fixes")
+    priority_intents = ["Rep", "Transfer_Form"]
+    
+    for intent_name in priority_intents:
+        if intent_name in intents:
+            with st.expander(f"🎯 {intent_name} (Priority Fix)", expanded=True):
+                col1, col2, col3 = st.columns([2, 5, 1])
+                
+                with col1:
+                    st.markdown(f"**{intent_name}**")
+                    if intent_name == "Rep":
+                        st.caption("Fix: Add human rep phrases")
+                    else:
+                        st.caption("Fix: Exclude human transfers")
+                
+                with col2:
+                    current_desc = intents[intent_name]
+                    
+                    # Show suggested improvement
+                    if intent_name == "Rep":
+                        suggested_desc = "Handles all requests to speak with human representatives, customer service agents, live support staff, or real people. Includes phrases like 'transfer me to a representative', 'I want to talk to a human', 'connect me to a live agent', 'speak to someone', 'get me a person', 'customer service representative', 'human agent', 'live chat agent', 'transfer me to a human representative', 'connect me to customer service', 'I need to speak to someone'. Specifically focuses on human interaction requests, not automated systems, forms, or asset transfers."
+                    else:  # Transfer_Form
+                        suggested_desc = "Manages requests for transfer forms, transfer documentation, and paperwork for moving assets, funds, or accounts between financial institutions. Includes requests like 'I need a transfer form', 'transfer paperwork', 'account transfer documents', 'rollover forms', 'ACATS transfer forms'. Focuses specifically on FORMS and DOCUMENTATION for asset/account transfers, NOT requests to transfer calls to human representatives or agents."
+                    
+                    # Show current vs suggested
+                    tab1, tab2 = st.tabs(["Current", "Suggested"])
+                    
+                    with tab1:
+                        new_desc = st.text_area(
+                            "Current description:", 
+                            current_desc, 
+                            key=f"current_{intent_name}",
+                            height=120
+                        )
+                        
+                        if new_desc != current_desc:
+                            if st.button(f"💾 Update {intent_name}", key=f"update_{intent_name}"):
+                                intents[intent_name] = new_desc
+                                save_intents()
+                                st.success(f"✅ Updated {intent_name} description!")
+                                st.rerun()
+                    
+                    with tab2:
+                        st.text_area(
+                            "Suggested improvement:", 
+                            suggested_desc, 
+                            key=f"suggested_{intent_name}",
+                            height=120,
+                            disabled=True
+                        )
+                        
+                        if st.button(f"🚀 Apply Suggested Fix", key=f"apply_{intent_name}"):
+                            intents[intent_name] = suggested_desc
+                            save_intents()
+                            st.success(f"✅ Applied suggested fix for {intent_name}!")
+                            st.rerun()
+                
+                with col3:
+                    st.write("")  # Spacing
+                    if st.button("🗑️", key=f"remove_priority_{intent_name}", help="Remove intent"):
+                        del intents[intent_name]
+                        save_intents()
+                        st.rerun()
+    
+    st.divider()
+    
+    # Display all intents for current page
+    st.markdown("### 📋 All Intents")
+    
+    if intent_items:
+        for intent_name, intent_desc in intent_items[start_idx:end_idx]:
+            with st.container():
+                col1, col2, col3 = st.columns([2, 5, 1])
+                
+                with col1:
+                    st.markdown(f"**{intent_name}**")
+                    # Show word count
+                    word_count = len(intent_desc.split())
+                    if word_count < 10:
+                        st.caption(f"⚠️ {word_count} words (short)")
+                    else:
+                        st.caption(f"✅ {word_count} words")
+                
+                with col2:
+                    new_desc = st.text_area(
+                        "Description", 
+                        intent_desc, 
+                        key=f"desc_{intent_name}",
+                        height=100
+                    )
+                    if new_desc != intent_desc:
+                        if st.button(f"💾 Update", key=f"save_{intent_name}"):
+                            intents[intent_name] = new_desc
+                            save_intents()
+                            st.success(f"✅ Updated {intent_name}!")
+                            st.rerun()
+                
+                with col3:
+                    st.write("")  # Spacing
+                    if st.button("🗑️", key=f"remove_{intent_name}", help="Remove intent"):
+                        if st.session_state.get(f"confirm_delete_{intent_name}", False):
+                            del intents[intent_name]
+                            save_intents()
+                            st.success(f"Deleted {intent_name}")
+                            st.rerun()
+                        else:
+                            st.session_state[f"confirm_delete_{intent_name}"] = True
+                            st.warning("Click again to confirm delete")
+                
+                st.divider()
+    
+    # Pagination controls
+    if total_pages > 1:
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        
+        with col1:
+            if st.button("⏮️ First") and st.session_state.page > 0:
+                st.session_state.page = 0
                 st.rerun()
+        
+        with col2:
+            if st.button("◀️ Prev") and st.session_state.page > 0:
+                st.session_state.page -= 1
+                st.rerun()
+        
+        with col3:
+            st.markdown(f"<div style='text-align: center'>Page {st.session_state.page + 1} of {total_pages}</div>", unsafe_allow_html=True)
+        
+        with col4:
+            if st.button("Next ▶️") and st.session_state.page < total_pages - 1:
+                st.session_state.page += 1
+                st.rerun()
+        
+        with col5:
+            if st.button("Last ⏭️") and st.session_state.page < total_pages - 1:
+                st.session_state.page = total_pages - 1
+                st.rerun()
+    
+    st.divider()
+    
+    # Add new intent section
+    st.subheader("➕ Add New Intent")
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        new_name = st.text_input("Intent Name", placeholder="e.g., NewIntent_Category")
+    with col2:
+        new_desc = st.text_area("Intent Description", placeholder="Describe what this intent handles...")
+    
+    if st.button("➕ Add Intent", type="primary") and new_name and new_desc:
+        if new_name in intents:
+            st.error("❌ Intent name already exists.")
+        else:
+            intents[new_name] = new_desc
+            save_intents()
+            st.success(f"✅ Added intent: {new_name}")
+            st.rerun()
+    
+    # Bulk operations
+    st.divider()
+    st.subheader("🔧 Bulk Operations")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📥 Export Intents"):
+            # Create downloadable JSON
+            import json
+            json_str = json.dumps(intents, indent=2)
+            st.download_button(
+                label="⬇️ Download intents.json",
+                data=json_str,
+                file_name="intents_backup.json",
+                mime="application/json"
+            )
+    
+    with col2:
+        uploaded_file = st.file_uploader("📤 Import Intents", type=['json'])
+        if uploaded_file:
+            try:
+                imported_intents = json.load(uploaded_file)
+                if st.button("🔄 Import & Merge"):
+                    intents.update(imported_intents)
+                    save_intents()
+                    st.success(f"✅ Imported {len(imported_intents)} intents!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error importing file: {e}")
 
 # Footer
 st.divider()
