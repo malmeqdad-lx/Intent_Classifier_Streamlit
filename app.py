@@ -9,11 +9,14 @@ from sentence_transformers import SentenceTransformer, util
 import json
 import os
 
-# Load the embedding model
-# This is a lightweight transformer model (MiniLM) pre-trained for semantic similarity.
-# It turns text into vectors (numbers representing meaning) for comparison.
-# Downloads automatically on first run; no internet needed after.
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# Load the embedding model with caching
+# @st.cache_resource ensures the model loads only once, speeding up app start and reducing memory strain.
+# This is key for NLP apps: caching heavy models prevents reloads, similar to vector DBs in semantic search.
+@st.cache_resource
+def load_model():
+    return SentenceTransformer('all-MiniLM-L6-v2')
+
+model = load_model()
 
 # Define the file where intents are stored
 # JSON format: {"IntentName": "Description of the intent for embedding"}
@@ -280,7 +283,10 @@ def save_intents():
 
 # Main UI setup
 # Streamlit creates a web app in your browser.
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 st.title("Find my Intent")
 
 # Create two tabs: one for classification, one for managing intents
