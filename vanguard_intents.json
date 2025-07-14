@@ -443,7 +443,7 @@
   
   "VanguardInfo_FaxPhone": "Handles requests for Vanguard's fax numbers and phone numbers, including contact information, department phone numbers, and communication contact details.",
   
-  "VanguardInfo_MailingAddress": "Handles requests for Vanguard's mailing addresses, including corporate addresses, department mailing addresses, and correspondence addresses.",
+  "VanguardInfo_MailingAddress": "Only handles requests for Vanguard's mailing addresses, including corporate addresses, department mailing addresses, and correspondence addresses. It does not include other requests aside from providing Vanguard's mailing address.",
   
   "VanguardInfo_OfficeHours": "Handles inquiries about Vanguard's office hours, including business hours, customer service hours, and department operating hours.",
   
