@@ -1,7 +1,7 @@
 # Core Framework
 streamlit>=1.39.0
 
-# AI/ML Dependencies
+# AI/ML Dependencies - Enhanced for multi-model support
 sentence-transformers>=5.0.0
 transformers>=4.53.0
 torch>=2.1.0
@@ -16,6 +16,9 @@ scikit-learn>=1.3.0
 huggingface-hub>=0.24.0
 safetensors>=0.4.0
 
+# Enhanced for E5 and MPNet models
+datasets>=3.0.0
+
 # Utilities
 tqdm>=4.66.0
 requests>=2.31.0
@@ -23,3 +26,9 @@ requests>=2.31.0
 # Performance & Compatibility
 pillow>=10.0.0
 packaging>=23.0
+
+# Memory management for model switching
+psutil>=5.9.0
+
+# Additional dependencies for advanced models
+regex>=2024.0.0

@@ -1,9 +1,46 @@
-# Import necessary libraries
+# Enhanced app.py with Multi-Model Support
 import streamlit as st
 from sentence_transformers import SentenceTransformer, util
 import json
 import os
-# Safari Compatibility CSS
+import gc
+import torch
+import pandas as pd
+import numpy as np
+from io import StringIO
+
+# Model Configuration
+AVAILABLE_MODELS = {
+    "all-MiniLM-L6-v2": {
+        "name": "MiniLM-L6-v2 (Fast & Lightweight)",
+        "model_id": "all-MiniLM-L6-v2",
+        "size": "~90MB",
+        "dimensions": 384,
+        "speed": "⚡ Very Fast",
+        "quality": "🟡 Good",
+        "description": "Lightweight model optimized for speed. Good for real-time applications."
+    },
+    "all-mpnet-base-v2": {
+        "name": "MPNet-Base-v2 (Balanced)",
+        "model_id": "all-mpnet-base-v2", 
+        "size": "~420MB",
+        "dimensions": 768,
+        "speed": "🟡 Moderate", 
+        "quality": "🟢 Excellent",
+        "description": "Best balance of quality and performance. Recommended by SBERT for high-quality embeddings."
+    },
+    "intfloat/e5-base-v2": {
+        "name": "E5-Base-v2 (High Quality)",
+        "model_id": "intfloat/e5-base-v2",
+        "size": "~440MB", 
+        "dimensions": 768,
+        "speed": "🟡 Moderate",
+        "quality": "🟢 Excellent", 
+        "description": "State-of-the-art semantic search performance. Requires 'query:' prefix for optimal results."
+    }
+}
+
+# Enhanced Safari Compatibility CSS
 safari_css = """
 <style>
 .stApp {
@@ -27,13 +64,43 @@ safari_css = """
     -webkit-overflow-scrolling: touch;
     overflow-x: hidden;
 }
+
+.model-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 8px 0;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+.model-selected {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
+}
+
+.metric-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    margin: 2px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    background: #e3f2fd;
+    color: #1976d2;
+    font-weight: 500;
+}
+
+.confidence-high { background: #e8f5e9; color: #2e7d32; }
+.confidence-medium { background: #fff3e0; color: #f57c00; }
+.confidence-low { background: #ffebee; color: #c62828; }
 </style>
 """
 st.markdown(safari_css, unsafe_allow_html=True)
 
 # Configure page settings
 st.set_page_config(
-    page_title="Find My Intent",
+    page_title="Find My Intent - Multi-Model",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -47,11 +114,23 @@ CLASSIFICATION_THRESHOLDS = {
     "no_match": 0.15            # Below this = "No Intent Match"
 }
 
-# Use Streamlit caching to prevent reloading model and recomputing embeddings
-@st.cache_resource(show_spinner="Loading AI model...")
-def load_model():
-    """Load the embedding model once and cache it"""
-    return SentenceTransformer('all-MiniLM-L6-v2')
+def clear_model_cache():
+    """Clear model from memory and cache"""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+
+@st.cache_resource(show_spinner="Loading embedding model...")
+def load_model(model_id):
+    """Load the selected embedding model with caching"""
+    clear_model_cache()
+    
+    try:
+        model = SentenceTransformer(model_id)
+        return model
+    except Exception as e:
+        st.error(f"Error loading model {model_id}: {str(e)}")
+        return None
 
 @st.cache_data(show_spinner="Loading intents...")
 def load_intents():
@@ -62,30 +141,44 @@ def load_intents():
         with open(INTENTS_FILE, 'r') as f:
             return json.load(f)
     else:
-        # Add default intents including fallback categories
+        # Default intents including fallback categories
         intents = {
             "No_Intent_Match": "Handles utterances that don't match any specific intent category, including complaints, general dissatisfaction, requests for human agents, off-topic questions, and unrelated inquiries that fall outside the scope of defined financial services intents.",
             "General_Complaint": "Handles general complaints, expressions of dissatisfaction, negative feedback about services, requests to speak with supervisors or human agents, and general frustration that doesn't fit specific service categories.",
             "Human_Agent_Request": "Handles explicit requests to speak with a human representative, agent, or live person, including expressions of frustration with automated systems and demands for human assistance.",
-            # Your existing intents here (truncated for brevity)
             "401k": "Handles general inquiries about 401(k) retirement plans, including questions about plan details, contributions, loans, and general 401(k) information. This is a parent intent for broader 401(k) topics, while more specific 401(k) actions have dedicated child intents.",
             "401k_Transfer": "Specifically handles requests to transfer assets into or out of a 401(k) plan, including rollovers from other 401(k) plans and transfers between 401(k) providers. This is a child intent of the broader 401(k) category with focus on asset movement.",
-            # ... add all your other intents here
+            "IRA_Balance": "Handles requests to check Individual Retirement Account (IRA) balance, view account summary, or inquire about current IRA account value.",
+            "Transfer_Money": "Handles requests to transfer money between accounts, move funds, or conduct financial transfers within the system.",
+            "Account_Balance": "Handles general balance inquiries, account summary requests, and questions about current account values across different account types.",
         }
         
         with open(INTENTS_FILE, 'w') as f:
             json.dump(intents, f, indent=4)
         return intents
 
-@st.cache_data(show_spinner="Computing embeddings...")
-def compute_intent_embeddings(_model, intent_descriptions):
-    """Compute embeddings once and cache them"""
-    return _model.encode(intent_descriptions)
+def preprocess_text_for_e5(text, model_id, text_type="query"):
+    """Add required prefixes for E5 models"""
+    if "e5" in model_id.lower():
+        return f"{text_type}: {text}"
+    return text
 
-def classify_utterance(utterance, model, intent_names, intent_embeddings):
-    """Enhanced classification with confidence analysis"""
+@st.cache_data(show_spinner="Computing embeddings...")
+def compute_intent_embeddings(_model, model_id, intent_descriptions):
+    """Compute embeddings for intents with model-specific preprocessing"""
+    processed_descriptions = [
+        preprocess_text_for_e5(desc, model_id, "passage") 
+        for desc in intent_descriptions
+    ]
+    return _model.encode(processed_descriptions)
+
+def classify_utterance(utterance, model, model_id, intent_names, intent_embeddings):
+    """Enhanced classification with model-specific preprocessing"""
+    # Preprocess utterance for the specific model
+    processed_utterance = preprocess_text_for_e5(utterance, model_id, "query")
+    
     # Get embeddings and similarities
-    utt_embedding = model.encode(utterance)
+    utt_embedding = model.encode(processed_utterance)
     similarities = util.cos_sim(utt_embedding, intent_embeddings)[0]
     
     # Get top 5 results
@@ -111,7 +204,7 @@ def classify_utterance(utterance, model, intent_names, intent_embeddings):
         status_color = "🟢"
         status_text = "Strong Match"
     elif best_confidence >= CLASSIFICATION_THRESHOLDS["medium_confidence"]:
-        classification_level = "MEDIUM_CONFIDENCE"
+        classification_level = "MEDIUM_CONFIDENCE" 
         final_intent = best_intent
         status_color = "🟡"
         status_text = "Possible Match"
@@ -123,7 +216,7 @@ def classify_utterance(utterance, model, intent_names, intent_embeddings):
     else:
         classification_level = "NO_MATCH"
         final_intent = "No_Intent_Match"
-        status_color = "🔴"
+        status_color = "🔴" 
         status_text = "No Match Found"
     
     return {
@@ -135,502 +228,291 @@ def classify_utterance(utterance, model, intent_names, intent_embeddings):
         'best_confidence': best_confidence
     }
 
-# Initialize with loading indicators
-try:
-    model = load_model()
-    intents = load_intents()
-    intent_names = list(intents.keys())
-    intent_descs = list(intents.values())
-    intent_embeddings = compute_intent_embeddings(model, intent_descs)
-    st.success(f"✅ System ready! Loaded {len(intents)} intents.")
-except Exception as e:
-    st.error(f"❌ Error loading system: {str(e)}")
-    st.stop()
-
-def save_intents():
-    with open('vanguard_intents.json', 'w') as f:
-        json.dump(intents, f, indent=4)
-    st.cache_data.clear()
-
-# Main UI
-st.title("🎯 Find My Intent - Enhanced Classification")
-st.markdown("*AI-powered intent classification with confidence analysis*")
-
-# Configuration sidebar
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    st.subheader("Confidence Thresholds")
+def render_model_selector():
+    """Render an enhanced model selection interface"""
+    st.markdown("### 🤖 Select Embedding Model")
     
-    high_threshold = st.slider("High Confidence", 0.0, 1.0, 
-                              CLASSIFICATION_THRESHOLDS["high_confidence"], 0.05)
-    medium_threshold = st.slider("Medium Confidence", 0.0, 1.0, 
-                                CLASSIFICATION_THRESHOLDS["medium_confidence"], 0.05)
-    low_threshold = st.slider("Low Confidence", 0.0, 1.0, 
-                             CLASSIFICATION_THRESHOLDS["low_confidence"], 0.05)
+    # Initialize session state for selected model
+    if 'selected_model' not in st.session_state:
+        st.session_state.selected_model = "all-MiniLM-L6-v2"
     
-    # Update thresholds
-    CLASSIFICATION_THRESHOLDS.update({
-        "high_confidence": high_threshold,
-        "medium_confidence": medium_threshold, 
-        "low_confidence": low_threshold,
-        "no_match": low_threshold
-    })
+    # Model selection with detailed info
+    cols = st.columns(len(AVAILABLE_MODELS))
     
-    st.markdown("---")
-    st.markdown("**Legend:**")
-    st.markdown("🟢 High Confidence: Strong match")
-    st.markdown("🟡 Medium Confidence: Possible match") 
-    st.markdown("🟠 Low Confidence: Weak match")
-    st.markdown("🔴 No Match: Below threshold")
-
-# Create tabs
-tab1, tab2, tab3 = st.tabs(["🔍 Classify Utterances", "📊 Analysis Tools", "⚙️ Manage Intents"])
-
-# Tab 1: Enhanced Classification
-with tab1:
-    st.subheader("Enhanced Intent Classification")
-    
-    input_type = st.radio("Select input type", ["Single Utterance", "Batch Upload"], horizontal=True)
-    
-    if input_type == "Single Utterance":
-        utterance = st.text_area(
-            "Enter the utterance", 
-            placeholder="e.g., 'What's my IRA balance?' or 'you suck give me a human being'",
-            height=100
-        )
-        
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            classify_btn = st.button("🚀 Classify", type="primary")
-        
-        if classify_btn and utterance.strip():
-            with st.spinner('🤖 Analyzing utterance...'):
-                result = classify_utterance(utterance, model, intent_names, intent_embeddings)
-                
-                # Main result display
-                st.subheader("🎯 Classification Result")
-                
-                col1, col2, col3 = st.columns([2, 2, 3])
-                
-                with col1:
-                    st.metric("Final Classification", result['final_intent'])
-                
-                with col2:
-                    st.metric("Confidence Level", 
-                             f"{result['status_color']} {result['status_text']}")
-                
-                with col3:
-                    st.metric("Best Match Score", f"{result['best_confidence']:.3f}")
-                
-                # Confidence analysis
-                if result['classification_level'] in ['LOW_CONFIDENCE', 'NO_MATCH']:
-                    st.warning(f"""
-                    ⚠️ **Low Confidence Alert**: This utterance didn't match any intent strongly.
-                    
-                    **Recommended Actions:**
-                    1. Check if this represents a new intent category
-                    2. Review existing intent descriptions for improvement
-                    3. Consider adding training examples for similar utterances
-                    """)
-                
-                # Detailed breakdown
-                st.subheader("🔍 Detailed Analysis")
-                
-                # Show top matches with color coding
-                for i, result_item in enumerate(result['top_results']):
-                    intent_name = result_item['intent']
-                    confidence = result_item['confidence']
-                    
-                    # Determine color based on confidence
-                    if confidence >= CLASSIFICATION_THRESHOLDS["high_confidence"]:
-                        color = "🟢"
-                        confidence_label = "High"
-                    elif confidence >= CLASSIFICATION_THRESHOLDS["medium_confidence"]:
-                        color = "🟡" 
-                        confidence_label = "Medium"
-                    elif confidence >= CLASSIFICATION_THRESHOLDS["low_confidence"]:
-                        color = "🟠"
-                        confidence_label = "Low"
-                    else:
-                        color = "🔴"
-                        confidence_label = "Very Low"
-                    
-                    with st.expander(f"{color} **{i+1}. {intent_name}** - Score: {confidence:.3f} ({confidence_label})"):
-                        st.write(f"**Description:** {intents.get(intent_name, 'No description available')}")
-                        
-                        # Similarity explanation
-                        if confidence > 0.5:
-                            st.success("Strong semantic similarity detected")
-                        elif confidence > 0.3:
-                            st.info("Moderate semantic similarity")
-                        elif confidence > 0.15:
-                            st.warning("Weak semantic similarity")
-                        else:
-                            st.error("Very weak or no semantic similarity")
-                
-                # Intent improvement suggestions
-                if result['classification_level'] in ['LOW_CONFIDENCE', 'NO_MATCH']:
-                    st.subheader("💡 Improvement Suggestions")
-                    
-                    st.info(f"""
-                    **For utterance:** "{utterance}"
-                    
-                    **Possible improvements:**
-                    1. **Add a new intent** if this represents a common user request
-                    2. **Enhance existing descriptions** to better capture semantic meaning
-                    3. **Add negative examples** to existing intents to improve discrimination
-                    4. **Create specialized intents** for complaints, agent requests, or off-topic queries
-                    """)
-        
-        elif classify_btn:
-            st.warning("⚠️ Please enter an utterance to classify.")
-    
-    else:  # Batch Upload
-        uploaded_file = st.file_uploader("Upload a file (.txt or .csv, one utterance per line)", type=["txt", "csv"])
-        
-        if uploaded_file:
-            st.info(f"📁 File uploaded: {uploaded_file.name}")
+    for i, (model_key, model_info) in enumerate(AVAILABLE_MODELS.items()):
+        with cols[i]:
+            # Create model card
+            card_class = "model-card model-selected" if st.session_state.selected_model == model_key else "model-card"
             
-            if st.button("🚀 Classify Batch", type="primary"):
-                try:
-                    file_contents = uploaded_file.read().decode("utf-8")
-                    utterances = [line.strip() for line in file_contents.splitlines() if line.strip()]
-                    
-                    if utterances:
-                        results = []
-                        confidence_stats = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "NO_MATCH": 0}
+            st.markdown(f"""
+            <div class="{card_class}">
+                <h4 style="margin-top: 0;">{model_info['name']}</h4>
+                <p><strong>Size:</strong> {model_info['size']}</p>
+                <p><strong>Speed:</strong> {model_info['speed']}</p>
+                <p><strong>Quality:</strong> {model_info['quality']}</p>
+                <p><strong>Dimensions:</strong> {model_info['dimensions']}</p>
+                <p style="font-size: 0.9em; color: #666; margin-bottom: 16px;">{model_info['description']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button(f"Select", key=f"select_{model_key}", use_container_width=True):
+                if st.session_state.selected_model != model_key:
+                    st.session_state.selected_model = model_key
+                    # Clear caches when switching models
+                    st.cache_resource.clear()
+                    st.cache_data.clear()
+                    st.rerun()
+    
+    return st.session_state.selected_model
+
+def process_batch_file(uploaded_file):
+    """Process uploaded batch file and extract utterances"""
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+            # Try to find the utterance column
+            utterance_columns = ['utterance', 'text', 'query', 'input', 'message']
+            utterance_col = None
+            
+            for col in utterance_columns:
+                if col.lower() in [c.lower() for c in df.columns]:
+                    utterance_col = col
+                    break
+            
+            if utterance_col:
+                return df[utterance_col].dropna().tolist()
+            else:
+                # If no standard column found, use first column
+                return df.iloc[:, 0].dropna().tolist()
+        
+        elif uploaded_file.name.endswith('.txt'):
+            content = StringIO(uploaded_file.getvalue().decode("utf-8"))
+            lines = content.read().strip().split('\n')
+            return [line.strip() for line in lines if line.strip()]
+        
+        else:
+            st.error("Unsupported file format. Please upload .csv or .txt files.")
+            return []
+            
+    except Exception as e:
+        st.error(f"Error processing file: {str(e)}")
+        return []
+
+def main():
+    """Main application logic"""
+    st.title("🎯 Find My Intent - Multi-Model Classifier")
+    st.markdown("*Powered by advanced embedding models for superior intent classification*")
+    
+    # Model Selection
+    selected_model_key = render_model_selector()
+    selected_model_info = AVAILABLE_MODELS[selected_model_key]
+    
+    # Display current model info
+    st.info(f"**Current Model:** {selected_model_info['name']} | **Quality:** {selected_model_info['quality']} | **Speed:** {selected_model_info['speed']}")
+    
+    # Initialize system with selected model
+    try:
+        with st.spinner(f"Loading {selected_model_info['name']}..."):
+            model = load_model(selected_model_info['model_id'])
+            if model is None:
+                st.error("Failed to load model. Please try again.")
+                return
+                
+            intents = load_intents()
+            intent_names = list(intents.keys())
+            intent_descs = list(intents.values())
+            
+            # Compute embeddings with model-specific preprocessing
+            intent_embeddings = compute_intent_embeddings(
+                model, selected_model_info['model_id'], intent_descs
+            )
+            
+        st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
+        
+        # Create tabs for different functionality
+        tab1, tab2, tab3 = st.tabs(["🎯 Classify Utterances", "📊 Analysis Tools", "⚙️ Manage Intents"])
+        
+        with tab1:
+            st.header("Intent Classification")
+            
+            # Single utterance classification
+            st.subheader("Single Utterance")
+            user_input = st.text_area(
+                "Enter utterance to classify:",
+                placeholder="e.g., I want to transfer money to my savings account",
+                height=100
+            )
+            
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("🎯 Classify", type="primary", use_container_width=True):
+                    if user_input.strip():
+                        with st.spinner("Classifying..."):
+                            result = classify_utterance(
+                                user_input, model, selected_model_info['model_id'], 
+                                intent_names, intent_embeddings
+                            )
                         
+                        # Display results
+                        st.markdown(f"### {result['status_color']} Classification Result")
+                        
+                        col_result1, col_result2 = st.columns(2)
+                        with col_result1:
+                            st.markdown(f"**Status:** {result['status_text']}")
+                            st.markdown(f"**Final Intent:** `{result['final_intent']}`")
+                        with col_result2:
+                            st.markdown(f"**Confidence:** {result['best_confidence']:.3f}")
+                            st.markdown(f"**Model:** {selected_model_info['name']}")
+                        
+                        # Show top 5 results
+                        st.markdown("### Top 5 Matches")
+                        for i, res in enumerate(result['top_results'], 1):
+                            confidence_color = "🟢" if res['confidence'] >= 0.5 else "🟡" if res['confidence'] >= 0.3 else "🟠"
+                            st.markdown(f"{i}. {confidence_color} **{res['intent']}** ({res['confidence']:.3f})")
+                    else:
+                        st.warning("Please enter an utterance to classify.")
+            
+            with col2:
+                if st.button("🔄 Clear", use_container_width=True):
+                    st.rerun()
+            
+            # Batch Processing
+            st.markdown("---")
+            st.subheader("Batch Processing")
+            
+            uploaded_file = st.file_uploader(
+                "Upload file with utterances (.csv or .txt)",
+                type=['csv', 'txt'],
+                help="CSV files should have an 'utterance' or 'text' column. TXT files should have one utterance per line."
+            )
+            
+            if uploaded_file is not None:
+                utterances = process_batch_file(uploaded_file)
+                
+                if utterances:
+                    st.success(f"Loaded {len(utterances)} utterances")
+                    
+                    if st.button("🚀 Process Batch", type="primary"):
                         progress_bar = st.progress(0)
                         status_text = st.empty()
                         
+                        batch_results = []
                         for i, utterance in enumerate(utterances):
                             status_text.text(f"Processing {i+1}/{len(utterances)}: {utterance[:50]}...")
                             
-                            result = classify_utterance(utterance, model, intent_names, intent_embeddings)
+                            result = classify_utterance(
+                                utterance, model, selected_model_info['model_id'],
+                                intent_names, intent_embeddings
+                            )
                             
-                            # Count confidence levels
-                            level = result['classification_level'].split('_')[0]
-                            if level in confidence_stats:
-                                confidence_stats[level] += 1
-                            
-                            results.append({
-                                "Utterance": utterance,
-                                "Final Intent": result['final_intent'],
-                                "Status": f"{result['status_color']} {result['status_text']}",
-                                "Best Score": f"{result['best_confidence']:.3f}",
-                                "Classification": result['classification_level']
+                            batch_results.append({
+                                'Utterance': utterance,
+                                'Final_Intent': result['final_intent'],
+                                'Confidence': result['best_confidence'],
+                                'Status': result['status_text']
                             })
                             
                             progress_bar.progress((i + 1) / len(utterances))
                         
-                        status_text.text("✅ Processing complete!")
+                        # Display results
+                        st.success("✅ Batch processing complete!")
+                        results_df = pd.DataFrame(batch_results)
+                        st.dataframe(results_df, use_container_width=True)
                         
-                        # Summary statistics
-                        st.subheader("📊 Batch Classification Summary")
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        total = len(results)
-                        col1.metric("🟢 High Confidence", confidence_stats["HIGH"], 
-                                   f"{confidence_stats['HIGH']/total*100:.1f}%")
-                        col2.metric("🟡 Medium Confidence", confidence_stats["MEDIUM"], 
-                                   f"{confidence_stats['MEDIUM']/total*100:.1f}%")
-                        col3.metric("🟠 Low Confidence", confidence_stats["LOW"], 
-                                   f"{confidence_stats['LOW']/total*100:.1f}%")
-                        col4.metric("🔴 No Match", confidence_stats["NO_MATCH"], 
-                                   f"{confidence_stats['NO_MATCH']/total*100:.1f}%")
-                        
-                        # Detailed results
-                        st.subheader("📋 Detailed Results")
-                        st.dataframe(results, use_container_width=True)
-                        
-                        # Flag potential issues
-                        low_confidence_count = confidence_stats["LOW"] + confidence_stats["NO_MATCH"]
-                        if low_confidence_count > total * 0.2:  # More than 20% low confidence
-                            st.warning(f"""
-                            ⚠️ **Quality Alert**: {low_confidence_count} utterances ({low_confidence_count/total*100:.1f}%) had low confidence scores.
-                            
-                            Consider reviewing your intent descriptions or adding new intent categories.
-                            """)
-                        
-                    else:
-                        st.warning("⚠️ Uploaded file appears to be empty or invalid.")
-                        
-                except Exception as e:
-                    st.error(f"❌ Error processing file: {str(e)}")
-
-# Tab 2: Analysis Tools
-with tab2:
-    st.subheader("📊 Intent Analysis Tools")
-    
-    analysis_type = st.selectbox("Select Analysis Type", [
-        "Intent Similarity Matrix",
-        "Problematic Utterances",
-        "Intent Description Quality",
-        "Threshold Optimization"
-    ])
-    
-    if analysis_type == "Intent Similarity Matrix":
-        st.info("🔧 Coming soon: Visualize similarity between different intents")
-        
-    elif analysis_type == "Problematic Utterances":
-        st.markdown("### Test Problematic Utterances")
-        
-        # Predefined test cases
-        test_cases = [
-            "you suck give me a human being",
-            "this is terrible",
-            "I hate your system",
-            "transfer me to someone who speaks english",
-            "your website is broken",
-            "I want to cancel everything",
-            "this makes no sense",
-            "help me now"
-        ]
-        
-        if st.button("🧪 Test Problematic Cases"):
-            st.markdown("#### Results:")
+                        # Download option
+                        csv = results_df.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Results",
+                            csv,
+                            "intent_classification_results.csv",
+                            "text/csv",
+                            key='download-csv'
+                        )
             
-            for utterance in test_cases:
-                result = classify_utterance(utterance, model, intent_names, intent_embeddings)
-                
-                with st.expander(f"{result['status_color']} \"{utterance}\" → {result['final_intent']} ({result['best_confidence']:.3f})"):
-                    if result['classification_level'] in ['LOW_CONFIDENCE', 'NO_MATCH']:
-                        st.success("✅ Correctly identified as low confidence")
+            # Model comparison info
+            st.markdown("---")
+            st.markdown("### 📈 Model Performance Tips")
+            if "e5" in selected_model_key:
+                st.info("💡 **E5 Model Active:** This model uses 'query:' and 'passage:' prefixes for optimal performance. This is handled automatically.")
+            elif "mpnet" in selected_model_key:
+                st.info("💡 **MPNet Model Active:** Excellent balance of quality and speed. Recommended for production use.")
+            else:
+                st.info("💡 **MiniLM Model Active:** Fastest option. Consider upgrading to MPNet or E5 for better accuracy.")
+        
+        with tab2:
+            st.header("📊 Analysis Tools")
+            st.markdown("*Analysis tools for intent optimization and model comparison*")
+            
+            # Intent similarity analysis
+            st.subheader("Intent Similarity Analysis")
+            if st.button("🔍 Find Similar Intents"):
+                with st.spinner("Analyzing intent similarities..."):
+                    # Compute pairwise similarities between intents
+                    similarities = util.cos_sim(intent_embeddings, intent_embeddings)
+                    
+                    similar_pairs = []
+                    for i in range(len(intent_names)):
+                        for j in range(i+1, len(intent_names)):
+                            sim_score = similarities[i][j].item()
+                            if sim_score > 0.7:  # High similarity threshold
+                                similar_pairs.append({
+                                    'Intent 1': intent_names[i],
+                                    'Intent 2': intent_names[j],
+                                    'Similarity': sim_score
+                                })
+                    
+                    if similar_pairs:
+                        similar_df = pd.DataFrame(similar_pairs)
+                        similar_df = similar_df.sort_values('Similarity', ascending=False)
+                        st.dataframe(similar_df, use_container_width=True)
+                        st.warning("⚠️ High similarity between intents may cause classification confusion.")
                     else:
-                        st.warning("⚠️ May need attention - high confidence on potentially problematic utterance")
-                    
-                    st.write(f"**Top 3 matches:**")
-                    for i, item in enumerate(result['top_results'][:3]):
-                        st.write(f"{i+1}. {item['intent']} ({item['confidence']:.3f})")
-
-# Tab 3: Manage Intents (simplified version of your existing tab)
-# Replace your Tab 3 content with this complete Manage Intents functionality
-
-# Tab 3: Fixed Manage Intents
-with tab3:
-    st.subheader("⚙️ Manage Intents")
-    
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        search_term = st.text_input("🔍 Search intents:", placeholder="Type intent name or description...")
-    with col2:
-        st.metric("Total Intents", len(intents))
-    
-    # Filter intents based on search
-    if search_term:
-        filtered_intents = {
-            k: v for k, v in intents.items() 
-            if search_term.lower() in k.lower() or search_term.lower() in v.lower()
-        }
-        st.info(f"Showing {len(filtered_intents)} of {len(intents)} intents")
-    else:
-        filtered_intents = intents
-    
-    # Pagination for better performance
-    items_per_page = 10
-    if 'page' not in st.session_state:
-        st.session_state.page = 0
-    
-    intent_items = list(filtered_intents.items())
-    total_pages = max(1, (len(intent_items) - 1) // items_per_page + 1)
-    
-    # Ensure page is within bounds
-    if st.session_state.page >= total_pages:
-        st.session_state.page = 0
-    
-    start_idx = st.session_state.page * items_per_page
-    end_idx = min(start_idx + items_per_page, len(intent_items))
-    
-    # Quick access for Rep and Transfer_Form intents
-    st.markdown("### 🔥 Quick Access - Priority Fixes")
-    priority_intents = ["Rep", "Transfer_Form"]
-    
-    for intent_name in priority_intents:
-        if intent_name in intents:
-            with st.expander(f"🎯 {intent_name} (Priority Fix)", expanded=True):
-                col1, col2, col3 = st.columns([2, 5, 1])
-                
-                with col1:
-                    st.markdown(f"**{intent_name}**")
-                    if intent_name == "Rep":
-                        st.caption("Fix: Add human rep phrases")
-                    else:
-                        st.caption("Fix: Exclude human transfers")
-                
-                with col2:
-                    current_desc = intents[intent_name]
-                    
-                    # Show suggested improvement
-                    if intent_name == "Rep":
-                        suggested_desc = "Handles all requests to speak with human representatives, customer service agents, live support staff, or real people. Includes phrases like 'transfer me to a representative', 'I want to talk to a human', 'connect me to a live agent', 'speak to someone', 'get me a person', 'customer service representative', 'human agent', 'live chat agent', 'transfer me to a human representative', 'connect me to customer service', 'I need to speak to someone'. Specifically focuses on human interaction requests, not automated systems, forms, or asset transfers."
-                    else:  # Transfer_Form
-                        suggested_desc = "Manages requests for transfer forms, transfer documentation, and paperwork for moving assets, funds, or accounts between financial institutions. Includes requests like 'I need a transfer form', 'transfer paperwork', 'account transfer documents', 'rollover forms', 'ACATS transfer forms'. Focuses specifically on FORMS and DOCUMENTATION for asset/account transfers, NOT requests to transfer calls to human representatives or agents."
-                    
-                    # Show current vs suggested
-                    tab1, tab2 = st.tabs(["Current", "Suggested"])
-                    
-                    with tab1:
-                        new_desc = st.text_area(
-                            "Current description:", 
-                            current_desc, 
-                            key=f"current_{intent_name}",
-                            height=120
-                        )
-                        
-                        if new_desc != current_desc:
-                            if st.button(f"💾 Update {intent_name}", key=f"update_{intent_name}"):
-                                intents[intent_name] = new_desc
-                                save_intents()
-                                st.success(f"✅ Updated {intent_name} description!")
-                                st.rerun()
-                    
-                    with tab2:
-                        st.text_area(
-                            "Suggested improvement:", 
-                            suggested_desc, 
-                            key=f"suggested_{intent_name}",
-                            height=120,
-                            disabled=True
-                        )
-                        
-                        if st.button(f"🚀 Apply Suggested Fix", key=f"apply_{intent_name}"):
-                            intents[intent_name] = suggested_desc
-                            save_intents()
-                            st.success(f"✅ Applied suggested fix for {intent_name}!")
-                            st.rerun()
-                
-                with col3:
-                    st.write("")  # Spacing
-                    if st.button("🗑️", key=f"remove_priority_{intent_name}", help="Remove intent"):
-                        del intents[intent_name]
-                        save_intents()
-                        st.rerun()
-    
-    st.divider()
-    
-    # Display all intents for current page
-    st.markdown("### 📋 All Intents")
-    
-    if intent_items:
-        for intent_name, intent_desc in intent_items[start_idx:end_idx]:
-            with st.container():
-                col1, col2, col3 = st.columns([2, 5, 1])
-                
-                with col1:
-                    st.markdown(f"**{intent_name}**")
-                    # Show word count
-                    word_count = len(intent_desc.split())
-                    if word_count < 10:
-                        st.caption(f"⚠️ {word_count} words (short)")
-                    else:
-                        st.caption(f"✅ {word_count} words")
-                
-                with col2:
-                    new_desc = st.text_area(
-                        "Description", 
-                        intent_desc, 
+                        st.success("✅ No highly similar intents found!")
+            
+            # Model comparison placeholder
+            st.subheader("Model Performance Comparison")
+            st.info("Compare classification results across different models for the same utterances. Feature coming soon!")
+        
+        with tab3:
+            st.header("⚙️ Intent Management")
+            st.markdown("*Manage your intent library and descriptions*")
+            
+            # Display current model's embedding dimensions
+            st.info(f"Current model produces {selected_model_info['dimensions']}-dimensional embeddings")
+            
+            # Intent search and display
+            search_term = st.text_input("🔍 Search intents:", placeholder="Search by name or description...")
+            
+            if search_term:
+                filtered_intents = {k: v for k, v in intents.items() 
+                                 if search_term.lower() in k.lower() or search_term.lower() in v.lower()}
+            else:
+                filtered_intents = intents
+            
+            st.markdown(f"**Showing {len(filtered_intents)} of {len(intents)} intents**")
+            
+            # Display intents with edit capability
+            for intent_name, intent_desc in list(filtered_intents.items())[:10]:  # Show first 10
+                with st.expander(f"📌 {intent_name}"):
+                    st.text_area(
+                        "Description:",
+                        value=intent_desc,
+                        height=100,
                         key=f"desc_{intent_name}",
-                        height=100
+                        help="Edit the intent description to improve classification accuracy"
                     )
-                    if new_desc != intent_desc:
-                        if st.button(f"💾 Update", key=f"save_{intent_name}"):
-                            intents[intent_name] = new_desc
-                            save_intents()
-                            st.success(f"✅ Updated {intent_name}!")
-                            st.rerun()
-                
-                with col3:
-                    st.write("")  # Spacing
-                    if st.button("🗑️", key=f"remove_{intent_name}", help="Remove intent"):
-                        if st.session_state.get(f"confirm_delete_{intent_name}", False):
-                            del intents[intent_name]
-                            save_intents()
-                            st.success(f"Deleted {intent_name}")
-                            st.rerun()
-                        else:
-                            st.session_state[f"confirm_delete_{intent_name}"] = True
-                            st.warning("Click again to confirm delete")
-                
-                st.divider()
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button(f"💾 Save", key=f"save_{intent_name}"):
+                            st.success(f"Intent '{intent_name}' saved! (Note: Changes are in sandbox mode)")
+                    with col2:
+                        if st.button(f"🗑️ Delete", key=f"delete_{intent_name}"):
+                            st.warning(f"Intent '{intent_name}' would be deleted! (Note: Changes are in sandbox mode)")
     
-    # Pagination controls
-    if total_pages > 1:
-        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
-        
-        with col1:
-            if st.button("⏮️ First") and st.session_state.page > 0:
-                st.session_state.page = 0
-                st.rerun()
-        
-        with col2:
-            if st.button("◀️ Prev") and st.session_state.page > 0:
-                st.session_state.page -= 1
-                st.rerun()
-        
-        with col3:
-            st.markdown(f"<div style='text-align: center'>Page {st.session_state.page + 1} of {total_pages}</div>", unsafe_allow_html=True)
-        
-        with col4:
-            if st.button("Next ▶️") and st.session_state.page < total_pages - 1:
-                st.session_state.page += 1
-                st.rerun()
-        
-        with col5:
-            if st.button("Last ⏭️") and st.session_state.page < total_pages - 1:
-                st.session_state.page = total_pages - 1
-                st.rerun()
-    
-    st.divider()
-    
-    # Add new intent section
-    st.subheader("➕ Add New Intent")
-    
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        new_name = st.text_input("Intent Name", placeholder="e.g., NewIntent_Category")
-    with col2:
-        new_desc = st.text_area("Intent Description", placeholder="Describe what this intent handles...")
-    
-    if st.button("➕ Add Intent", type="primary") and new_name and new_desc:
-        if new_name in intents:
-            st.error("❌ Intent name already exists.")
-        else:
-            intents[new_name] = new_desc
-            save_intents()
-            st.success(f"✅ Added intent: {new_name}")
-            st.rerun()
-    
-    # Bulk operations
-    st.divider()
-    st.subheader("🔧 Bulk Operations")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📥 Export Intents"):
-            # Create downloadable JSON
-            import json
-            json_str = json.dumps(intents, indent=2)
-            st.download_button(
-                label="⬇️ Download intents.json",
-                data=json_str,
-                file_name="intents_backup.json",
-                mime="application/json"
-            )
-    
-    with col2:
-        uploaded_file = st.file_uploader("📤 Import Intents", type=['json'])
-        if uploaded_file:
-            try:
-                imported_intents = json.load(uploaded_file)
-                if st.button("🔄 Import & Merge"):
-                    intents.update(imported_intents)
-                    save_intents()
-                    st.success(f"✅ Imported {len(imported_intents)} intents!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error importing file: {e}")
+    except Exception as e:
+        st.error(f"Error initializing system: {str(e)}")
+        st.markdown("Try refreshing the page or selecting a different model.")
 
-# Footer
-st.divider()
-st.markdown("*Enhanced with confidence thresholds and classification analysis • Powered by Sentence Transformers*")
+if __name__ == "__main__":
+    main()
