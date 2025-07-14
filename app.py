@@ -480,35 +480,131 @@ def main():
             # Display current model's embedding dimensions
             st.info(f"Current model produces {selected_model_info['dimensions']}-dimensional embeddings")
             
-            # Intent search and display
-            search_term = st.text_input("🔍 Search intents:", placeholder="Search by name or description...")
+            # Intent search and display controls
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                search_term = st.text_input("🔍 Search intents:", placeholder="Search by name or description...")
+            with col2:
+                items_per_page = st.selectbox("Items per page:", [10, 25, 50, 100], index=0)
             
+            # Filter intents based on search
             if search_term:
                 filtered_intents = {k: v for k, v in intents.items() 
                                  if search_term.lower() in k.lower() or search_term.lower() in v.lower()}
             else:
                 filtered_intents = intents
             
-            st.markdown(f"**Showing {len(filtered_intents)} of {len(intents)} intents**")
+            # Pagination setup
+            total_intents = len(filtered_intents)
+            total_pages = (total_intents - 1) // items_per_page + 1 if total_intents > 0 else 1
             
-            # Display intents with edit capability
-            for intent_name, intent_desc in list(filtered_intents.items())[:10]:  # Show first 10
-                with st.expander(f"📌 {intent_name}"):
-                    st.text_area(
-                        "Description:",
-                        value=intent_desc,
-                        height=100,
-                        key=f"desc_{intent_name}",
-                        help="Edit the intent description to improve classification accuracy"
-                    )
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button(f"💾 Save", key=f"save_{intent_name}"):
-                            st.success(f"Intent '{intent_name}' saved! (Note: Changes are in sandbox mode)")
-                    with col2:
-                        if st.button(f"🗑️ Delete", key=f"delete_{intent_name}"):
-                            st.warning(f"Intent '{intent_name}' would be deleted! (Note: Changes are in sandbox mode)")
+            # Initialize page state
+            if 'current_page' not in st.session_state:
+                st.session_state.current_page = 1
+            
+            # Reset page when search changes
+            if 'last_search' not in st.session_state:
+                st.session_state.last_search = ""
+            if search_term != st.session_state.last_search:
+                st.session_state.current_page = 1
+                st.session_state.last_search = search_term
+            
+            # Page navigation
+            if total_pages > 1:
+                col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+                
+                with col1:
+                    if st.button("⏮️ First", disabled=st.session_state.current_page == 1):
+                        st.session_state.current_page = 1
+                        st.rerun()
+                
+                with col2:
+                    if st.button("◀️ Prev", disabled=st.session_state.current_page == 1):
+                        st.session_state.current_page -= 1
+                        st.rerun()
+                
+                with col3:
+                    st.markdown(f"<div style='text-align: center; padding: 8px;'><strong>Page {st.session_state.current_page} of {total_pages}</strong></div>", unsafe_allow_html=True)
+                
+                with col4:
+                    if st.button("Next ▶️", disabled=st.session_state.current_page == total_pages):
+                        st.session_state.current_page += 1
+                        st.rerun()
+                
+                with col5:
+                    if st.button("Last ⏭️", disabled=st.session_state.current_page == total_pages):
+                        st.session_state.current_page = total_pages
+                        st.rerun()
+            
+            # Calculate range for current page
+            start_idx = (st.session_state.current_page - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            
+            # Get items for current page
+            filtered_items = list(filtered_intents.items())[start_idx:end_idx]
+            
+            # Display summary
+            if search_term:
+                st.markdown(f"**Found {total_intents} intents matching '{search_term}'** | Showing {len(filtered_items)} intents (#{start_idx + 1}-#{min(end_idx, total_intents)} of {total_intents})")
+            else:
+                st.markdown(f"**Total: {len(intents)} intents** | Showing {len(filtered_items)} intents (#{start_idx + 1}-#{min(end_idx, total_intents)} of {total_intents})")
+            
+            # Add quick stats
+            if not search_term:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("📊 Total Intents", len(intents))
+                with col2:
+                    avg_desc_length = sum(len(desc.split()) for desc in intents.values()) / len(intents)
+                    st.metric("📝 Avg Description Length", f"{avg_desc_length:.1f} words")
+                with col3:
+                    st.metric("🧠 Model Dimensions", selected_model_info['dimensions'])
+            
+            # Display intents for current page
+            if filtered_items:
+                for intent_name, intent_desc in filtered_items:
+                    with st.expander(f"📌 {intent_name}"):
+                        st.text_area(
+                            "Description:",
+                            value=intent_desc,
+                            height=100,
+                            key=f"desc_{intent_name}",
+                            help="Edit the intent description to improve classification accuracy"
+                        )
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            if st.button(f"💾 Save", key=f"save_{intent_name}"):
+                                st.success(f"Intent '{intent_name}' saved! (Note: Changes are in sandbox mode)")
+                        with col2:
+                            if st.button(f"🧪 Test", key=f"test_{intent_name}"):
+                                st.info(f"Testing intent '{intent_name}' - Feature coming soon!")
+                        with col3:
+                            if st.button(f"🗑️ Delete", key=f"delete_{intent_name}"):
+                                st.warning(f"Intent '{intent_name}' would be deleted! (Note: Changes are in sandbox mode)")
+            else:
+                if search_term:
+                    st.warning(f"No intents found matching '{search_term}'. Try a different search term.")
+                else:
+                    st.info("No intents to display.")
+            
+            # Add intent functionality
+            st.markdown("---")
+            st.subheader("➕ Add New Intent")
+            with st.form("add_intent_form"):
+                new_intent_name = st.text_input("Intent Name:", placeholder="e.g., New_Feature_Request")
+                new_intent_desc = st.text_area("Intent Description:", placeholder="Describe what this intent handles...", height=100)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.form_submit_button("➕ Add Intent", type="primary"):
+                        if new_intent_name and new_intent_desc:
+                            st.success(f"Intent '{new_intent_name}' would be added! (Note: Changes are in sandbox mode)")
+                        else:
+                            st.error("Please provide both intent name and description.")
+                with col2:
+                    if st.form_submit_button("🔄 Clear Form"):
+                        st.rerun()
     
     except Exception as e:
         st.error(f"Error initializing system: {str(e)}")
