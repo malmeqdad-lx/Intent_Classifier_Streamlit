@@ -5,9 +5,11 @@
   
   "403b": "Handles inquiries about 403(b) retirement plans, which are similar to 401(k) plans but specifically for employees of public schools, tax-exempt organizations, and certain ministers. Covers contributions, distributions, and plan-specific information.",
   
-  "Access_Password": "Handles requests related to account password issues, including password resets, password recovery, forgotten passwords, and password change requests for online account access.",
+  "529": "Handles questions about 529 College Savings Plans, including 529 plan details, 529 contributions, 529 distributions for qualified education expenses, 529 investment options, and general 529 plan information. This is specifically for users asking about 529 accounts and is different from ESA (Education Savings Account) intents.",
   
-  "Access_Request": "Manages requests for account access, including new user registration, access to specific account features, permission requests, and general account access inquiries that don't relate to passwords or security questions.",
+  "529_Open": "Handles specific inquiries about opening a 529 College Savings Plan account, including 529 account setup procedures, 529 application processes, and 529 account establishment requirements. This is a child intent of the broader 529 category focused on account opening.",
+  
+  "Access_Request": "Manages requests for account access, including new user registration, access to specific account features, permission requests, password changes, username updates, password resets, and general account access inquiries related to login credentials and authentication.",
   
   "Access_Security": "Handles security-related access issues, including security questions, two-factor authentication, account lockouts, security verification, and other authentication-related inquiries beyond basic password issues.",
   
@@ -31,7 +33,7 @@
   
   "Address": "A parent intent that handles general address-related inquiries, including questions about mailing addresses, address requirements, and address-related topics that aren't specific change requests.",
   
-  "Address_Change": "A child intent of Address that specifically handles requests to update or change existing addresses, including mailing address changes, residential address updates, and address modification requests. Distinct from requests for Vanguard's address.",
+  "Address_Change": "A child intent of Address that specifically handles requests to update or change existing addresses, including mailing address changes, residential address updates, and address modification requests. Distinct from requests for company addresses.",
   
   "Annuity": "Handles inquiries about annuity products, including immediate annuities, deferred annuities, annuity rates, annuity payments, and annuity-related investment options and services.",
   
@@ -63,7 +65,7 @@
   
   "Bank_Authentication": "A child intent that specifically handles bank account authentication processes, including bank verification, linking bank accounts, and authentication procedures for bank connections.",
   
-  "Bank_Transfer": "Manages transfers between Vanguard accounts and external bank accounts, including ACH transfers, electronic fund transfers, and bank-to-Vanguard account movements.",
+  "Bank_Transfer": "Manages transfers between accounts and external bank accounts, including ACH transfers, electronic fund transfers, and bank-to-account movements.",
   
   "Beneficiary": "Handles beneficiary-related inquiries, including beneficiary designations, beneficiary changes, beneficiary information, and beneficiary-related account features.",
   
@@ -73,7 +75,7 @@
   
   "Brokerage_Transfer": "Handles transfers specific to brokerage accounts, including ACATS transfers, brokerage-to-brokerage transfers, and stock/security transfers between brokerage institutions.",
   
-  "Buy": "Handles general purchase requests and inquiries, including buying investments, purchase procedures, buy orders, and general purchasing-related topics across various investment types.",
+  "Buy": "This intent is reserved for general and ambiguous questions about buying or purchasing investments in retirement or investment accounts. Handles broad purchase inquiries, general buy requests, and non-specific purchasing questions that don't require immediate trade execution. This intent is different from Trade_REAL which handles actual trading activities.",
   
   "COO": "A parent intent for Change of Ownership (COO) requests, handling general ownership change inquiries and procedures that don't fall into specific COO subcategories.",
   
@@ -161,7 +163,7 @@
   
   "Email_OptOut": "Manages email opt-out requests, including unsubscribing from emails, email preference removal, and email communication cessation requests.",
   
-  "Email_Received": "Handles inquiries about emails received from Vanguard, including email verification, email content questions, and received email-related topics.",
+  "Email_Received": "Handles inquiries about emails received from the company, including email verification, email content questions, and received email-related topics.",
   
   "Estate": "Handles estate-related inquiries, including estate planning, estate account management, estate distributions, and estate-related account services.",
   
@@ -171,7 +173,7 @@
   
   "FixedIncome": "Handles inquiries about fixed income investments, including bonds, CDs, fixed income funds, and fixed income investment strategies and products.",
   
-  "Flagship": "Handles inquiries about Vanguard's Flagship services, including premium service tiers, Flagship benefits, and high-net-worth client services.",
+  "Flagship": "Handles inquiries about premium services, including flagship service tiers, premium benefits, and high-net-worth client services.",
   
   "Forms": "A parent intent for general form-related inquiries, including form requests, form completion, and form-related topics that don't require signature guarantees.",
   
@@ -237,7 +239,7 @@
   
   "MutualFund_Trade": "Handles mutual fund trading activities, including mutual fund purchases, mutual fund sales, and mutual fund transaction procedures.",
   
-  "Open": "A parent intent for general account opening inquiries, including new account applications and account opening procedures that don't fall into specific account type opening subcategories.",
+  "Open": "This intent is reserved for general and ambiguous questions about opening any type of account. Handles broad account opening inquiries, general setup questions, and non-specific account establishment requests that don't specify a particular account type. More specific account opening requests should use dedicated child intents like IRA_Open or 529_Open.",
   
   "Open_Application": "A child intent that specifically handles account opening applications, including application procedures, application status, and application-related inquiries.",
   
@@ -319,7 +321,7 @@
   
   "SBS_Withdraw": "Handles Small Business Services withdrawal requests, including business account distributions and business withdrawal procedures.",
   
-  "Sell": "Handles general selling requests and inquiries, including selling investments, sale procedures, sell orders, and general selling-related topics across various investment types.",
+  "Sell": "This intent is reserved for general and ambiguous questions about selling investments in retirement or investment accounts. Handles broad selling inquiries, general liquidation questions, and non-specific selling requests that don't require immediate trade execution. This intent is different from Trade_REAL which handles actual trading activities.",
   
   "SepIRA": "A parent intent for SEP-IRA inquiries, including SEP-IRA information, SEP-IRA rules, and general SEP-IRA-related topics for small business retirement plans.",
   
@@ -373,7 +375,7 @@
   
   "Tax_1099R": "Handles Form 1099-R tax document inquiries, including retirement distribution reporting, 1099-R forms, and retirement distribution tax documentation.",
   
-  "Tax_5498": "Handles Form 5498 tax document inquiries, including IRA contribution reporting, 5498 forms, and IRA-related tax documentation.",
+  "Tax_5498": "Handles Form 5498 tax document inquiries specifically, including IRA contribution reporting, Form 5498 documents, and IRA-related tax documentation. This intent is strictly for Form 5498 tax documents and should not capture other numeric references like account numbers or plan numbers.",
   
   "Tax_CapitalGains": "Handles capital gains tax inquiries, including capital gains reporting, capital gains calculations, and capital gains-related tax topics.",
   
@@ -439,17 +441,17 @@
   
   "UTMAUGMA": "Handles Uniform Transfers to Minors Act (UTMA) and Uniform Gifts to Minors Act (UGMA) account inquiries, including custodial accounts, minor account management, and UTMA/UGMA procedures.",
   
-  "VanguardInfo_Compliance": "Handles inquiries about Vanguard's compliance information, including regulatory compliance, compliance policies, and compliance-related questions.",
+  "VanguardInfo_Compliance": "Handles inquiries about compliance information, including regulatory compliance, compliance policies, and compliance-related questions.",
   
-  "VanguardInfo_FaxPhone": "Handles requests for Vanguard's fax numbers and phone numbers, including contact information, department phone numbers, and communication contact details.",
+  "VanguardInfo_FaxPhone": "Handles requests for fax numbers and phone numbers, including contact information, department phone numbers, and communication contact details.",
   
-  "VanguardInfo_MailingAddress": "Handles requests for Vanguard's mailing addresses, including corporate addresses, department mailing addresses, and correspondence addresses.",
+  "VanguardInfo_MailingAddress": "Handles requests for mailing addresses, including corporate addresses, department mailing addresses, and correspondence addresses.",
   
-  "VanguardInfo_OfficeHours": "Handles inquiries about Vanguard's office hours, including business hours, customer service hours, and department operating hours.",
+  "VanguardInfo_OfficeHours": "Handles inquiries about office hours, including business hours, customer service hours, and department operating hours.",
   
-  "VanguardInfo_RoutingNumber": "Handles requests for Vanguard's routing numbers, including bank routing information, ACH routing numbers, and wire routing information.",
+  "VanguardInfo_RoutingNumber": "Handles requests for routing numbers, including bank routing information, ACH routing numbers, and wire routing information.",
   
-  "Voyager": "Handles inquiries about Vanguard's Voyager services, including premium service tiers, Voyager benefits, and high-net-worth client services.",
+  "Voyager": "Handles inquiries about premium services, including voyager service tiers, premium benefits, and high-net-worth client services.",
   
   "Withdraw": "A parent intent for general withdrawal inquiries, including withdrawal requests, withdrawal procedures, and general withdrawal-related topics that don't fall into specific withdrawal subcategories. Distinct from 'distribute' which typically refers to retirement account payouts.",
   
@@ -459,5 +461,5 @@
   
   "Withholding_Change": "A child intent that specifically handles withholding change requests, including tax withholding modifications, withholding percentage changes, and withholding preference updates.",
   
-  "i401k": "Handles inquiries about institutional 401(k) plans, including employer-sponsored 401(k) services, institutional 401(k) management, and business 401(k) plan administration."
+  "i401k": "Handles inquiries about individual 401(k) plans, including self 401k, small business 401k."
 }
