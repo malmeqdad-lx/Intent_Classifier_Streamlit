@@ -75,7 +75,7 @@
   
   "Brokerage_Transfer": "Handles transfers specific to brokerage accounts, including ACATS transfers, brokerage-to-brokerage transfers, and stock/security transfers between brokerage institutions.",
   
-  "Buy": "This intent is reserved for general and ambiguous questions about buying or purchasing investments in retirement or investment accounts. Handles broad purchase inquiries, general buy requests, and non-specific purchasing questions that don't require immediate trade execution. This intent is different from Trade_REAL which handles actual trading activities.",
+  "Buy": "Reserved for general and ambiguous questions about buying investments. Examples: 'how do I buy stocks?', 'should I buy mutual funds?', 'what should I buy?'. Does NOT handle specific trade execution requests with quantities or symbols.",
   
   "COO": "A parent intent for Change of Ownership (COO) requests, handling general ownership change inquiries and procedures that don't fall into specific COO subcategories.",
   
@@ -355,7 +355,7 @@
   
   "Stocks": "A parent intent for general stock inquiries, including stock information, stock investments, and general stock-related topics that don't fall into specific stock subcategories.",
   
-  "Stocks_Close": "Handles stock position closing requests, including selling all stock positions, stock position liquidation, and stock position termination.",
+  "Stocks_Close": "Handles requests to close ALL stock positions or liquidate entire stock holdings, including portfolio liquidation and complete position termination. Examples: 'close all my stock positions', 'liquidate my entire portfolio', 'sell everything'. Does NOT handle individual buy orders or specific trade executions.",
   
   "Stocks_Trade": "A child intent that specifically handles stock trading activities, including buying stocks, selling stocks, stock trading procedures, and stock transaction-related inquiries.",
   
@@ -413,7 +413,7 @@
   
   "Trade_Change": "Handles requests to change existing trades, including trade modifications, order changes, and trade alteration procedures.",
   
-  "Trade_REAL": "Handles actual trading inquiries and procedures, including real trade execution, live trading operations, and actual trade-related services.",
+  "Trade_REAL": "Handles actual trade execution requests, including specific buy orders, sell orders, trade instructions with quantities and symbols. Examples: 'execute buy order for 100 shares', 'place sell order for VTSAX', 'buy 50 shares of VTI', 'sell 200 shares immediately'. Focuses on immediate trade execution, not general buying/selling questions.",
   
   "Trade_Refund": "Handles trade refund requests, including trade reversal refunds, transaction refunds, and trade-related refund procedures.",
   
