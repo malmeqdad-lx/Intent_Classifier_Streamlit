@@ -401,7 +401,6 @@ def load_intents():
         }
         return intents
 
-@st.cache_data(show_spinner="Computing intent embeddings...")
 def compute_intent_embeddings(model, model_id, intent_descriptions):
     """Compute embeddings for all intent descriptions with model-specific preprocessing"""
     try:
@@ -518,6 +517,14 @@ def main():
     # Model selection
     selected_model_key, selected_model_info = render_model_selector()
     
+    # Initialize session state for caching embeddings
+    if 'cached_embeddings' not in st.session_state:
+        st.session_state.cached_embeddings = {}
+    if 'cached_model_id' not in st.session_state:
+        st.session_state.cached_model_id = None
+    if 'cached_intents_hash' not in st.session_state:
+        st.session_state.cached_intents_hash = None
+    
     # Load model and intents
     with st.spinner(f"Initializing {selected_model_info['name']}..."):
         model = load_model(selected_model_info['model_id'])
@@ -530,10 +537,30 @@ def main():
         intent_names = list(intents.keys())
         intent_descs = list(intents.values())
         
-        # Compute embeddings with model-specific preprocessing
-        intent_embeddings = compute_intent_embeddings(
-            model, selected_model_info['model_id'], intent_descs
+        # Create a hash for the current intents to check if they've changed
+        intents_hash = hash(str(intent_descs))
+        
+        # Check if we need to recompute embeddings
+        need_recompute = (
+            st.session_state.cached_model_id != selected_model_info['model_id'] or
+            st.session_state.cached_intents_hash != intents_hash or
+            'intent_embeddings' not in st.session_state.cached_embeddings
         )
+        
+        if need_recompute:
+            with st.spinner("Computing intent embeddings..."):
+                intent_embeddings = compute_intent_embeddings(
+                    model, selected_model_info['model_id'], intent_descs
+                )
+                
+                # Cache the results in session state
+                st.session_state.cached_embeddings['intent_embeddings'] = intent_embeddings
+                st.session_state.cached_model_id = selected_model_info['model_id']
+                st.session_state.cached_intents_hash = intents_hash
+        else:
+            intent_embeddings = st.session_state.cached_embeddings['intent_embeddings']
+        
+    st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
         
     st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
     
