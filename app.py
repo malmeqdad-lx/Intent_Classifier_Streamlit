@@ -57,7 +57,7 @@ enhanced_css = """
     line-height: 1.6;
 }
 
-/* Enhanced tab styling for better visibility */
+/* Enhanced tab styling for better visibility in both themes */
 .stTabs [data-baseweb="tab-list"] {
     gap: 8px;
     background-color: transparent;
@@ -81,13 +81,43 @@ enhanced_css = """
     border-color: var(--primary-color);
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    color: var(--text-color) !important;
 }
 
+/* Fixed active tab styling for both light and dark modes */
 .stTabs [aria-selected="true"] {
     background-color: var(--primary-color) !important;
-    color: white !important;
     border-color: var(--primary-color);
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* Light mode active tab text */
+@media (prefers-color-scheme: light) {
+    .stTabs [aria-selected="true"] {
+        color: white !important;
+    }
+}
+
+/* Dark mode active tab text */
+@media (prefers-color-scheme: dark) {
+    .stTabs [aria-selected="true"] {
+        color: white !important;
+    }
+}
+
+/* Force correct colors based on Streamlit theme */
+[data-testid="stApp"][data-theme="light"] .stTabs [aria-selected="true"] {
+    color: white !important;
+}
+
+[data-testid="stApp"][data-theme="dark"] .stTabs [aria-selected="true"] {
+    color: white !important;
+}
+
+/* Fallback for when theme detection fails */
+.stTabs [aria-selected="true"] {
+    color: white !important;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
 /* Enhanced headers and subheaders */
@@ -559,8 +589,9 @@ def main():
                 st.session_state.cached_intents_hash = intents_hash
         else:
             intent_embeddings = st.session_state.cached_embeddings['intent_embeddings']
-        
-    st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
+            
+        if intent_embeddings is not None:
+            st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
         
     st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
     
