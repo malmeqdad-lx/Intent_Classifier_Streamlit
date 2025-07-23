@@ -431,6 +431,69 @@ def load_intents():
         }
         return intents
 
+def classify_utterance(utterance, model, model_id, intent_names, intent_embeddings):
+    """Classify a single utterance and return detailed results"""
+    try:
+        # Preprocess utterance based on model type
+        if "e5" in model_id.lower():
+            processed_utterance = f"query: {utterance}"
+        else:
+            processed_utterance = utterance
+        
+        # Encode the utterance
+        utterance_embedding = model.encode(processed_utterance, convert_to_tensor=True)
+        
+        # Compute similarities
+        similarities = util.cos_sim(utterance_embedding, intent_embeddings)[0]
+        
+        # Get top results
+        top_indices = torch.topk(similarities, k=min(5, len(intent_names))).indices.tolist()
+        top_results = []
+        
+        for idx in top_indices:
+            top_results.append({
+                'intent': intent_names[idx],
+                'confidence': similarities[idx].item()
+            })
+        
+        # Determine classification level
+        best_confidence = top_results[0]['confidence']
+        best_intent = top_results[0]['intent']
+        
+        if best_confidence >= CLASSIFICATION_THRESHOLDS["high_confidence"]:
+            classification_level = "HIGH_CONFIDENCE"
+            final_intent = best_intent
+            status_color = "🟢"
+            status_text = "Strong Match"
+        elif best_confidence >= CLASSIFICATION_THRESHOLDS["medium_confidence"]:
+            classification_level = "MEDIUM_CONFIDENCE" 
+            final_intent = best_intent
+            status_color = "🟡"
+            status_text = "Possible Match"
+        elif best_confidence >= CLASSIFICATION_THRESHOLDS["low_confidence"]:
+            classification_level = "LOW_CONFIDENCE"
+            final_intent = "No_Intent_Match"
+            status_color = "🟠"
+            status_text = "Weak Match - No Clear Intent"
+        else:
+            classification_level = "NO_MATCH"
+            final_intent = "No_Intent_Match"
+            status_color = "🔴" 
+            status_text = "No Match Found"
+        
+        return {
+            'final_intent': final_intent,
+            'classification_level': classification_level,
+            'status_color': status_color,
+            'status_text': status_text,
+            'top_results': top_results,
+            'best_confidence': best_confidence
+        }
+    
+    except Exception as e:
+        st.error(f"Error during classification: {str(e)}")
+        return None
+
 def compute_intent_embeddings(model, model_id, intent_descriptions):
     """Compute embeddings for all intent descriptions with model-specific preprocessing"""
     try:
@@ -446,7 +509,274 @@ def compute_intent_embeddings(model, model_id, intent_descriptions):
         st.error(f"Error computing embeddings: {str(e)}")
         return None
 
-def classify_utterance(utterance, model, model_id, intent_names, intent_embeddings):
+def save_intents(intents):
+    """Save intents to file"""
+    INTENTS_FILE = 'vanguard_intents.json'
+    try:
+        with open(INTENTS_FILE, 'w') as f:
+            json.dump(intents, f, indent=2)
+        return True
+    except Exception as e:
+        st.error(f"Error saving intents: {str(e)}")
+        return False
+
+def render_intent_manager(intents):
+    """Render the intent management interface with full CRUD functionality"""
+    
+    # Initialize session state for intent management
+    if 'intents_per_page' not in st.session_state:
+        st.session_state.intents_per_page = 10
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 0
+    if 'search_query' not in st.session_state:
+        st.session_state.search_query = ""
+    if 'editing_intent' not in st.session_state:
+        st.session_state.editing_intent = None
+    if 'show_add_form' not in st.session_state:
+        st.session_state.show_add_form = False
+    
+    # Search and filter
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        search_query = st.text_input(
+            "🔍 Search intents",
+            value=st.session_state.search_query,
+            placeholder="Search by intent name or description..."
+        )
+        st.session_state.search_query = search_query
+    
+    with col2:
+        items_per_page = st.selectbox(
+            "Items per page",
+            [5, 10, 20, 50, 100],
+            index=[5, 10, 20, 50, 100].index(st.session_state.intents_per_page)
+        )
+        st.session_state.intents_per_page = items_per_page
+    
+    with col3:
+        if st.button("➕ Add New Intent", type="primary"):
+            st.session_state.show_add_form = True
+            st.session_state.editing_intent = None
+            st.rerun()
+    
+    # Filter intents based on search
+    intent_items = list(intents.items())
+    if search_query:
+        intent_items = [
+            (name, desc) for name, desc in intent_items
+            if search_query.lower() in name.lower() or search_query.lower() in desc.lower()
+        ]
+    
+    # Pagination
+    total_intents = len(intent_items)
+    total_pages = max(1, (total_intents - 1) // items_per_page + 1)
+    
+    # Ensure current page is valid
+    if st.session_state.current_page >= total_pages:
+        st.session_state.current_page = max(0, total_pages - 1)
+    
+    start_idx = st.session_state.current_page * items_per_page
+    end_idx = min(start_idx + items_per_page, total_intents)
+    page_intents = intent_items[start_idx:end_idx]
+    
+    # Add new intent form
+    if st.session_state.show_add_form:
+        with st.container():
+            st.markdown("### ➕ Add New Intent")
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                new_intent_name = st.text_input("Intent Name", placeholder="e.g., Check_Weather")
+            with col2:
+                new_intent_desc = st.text_area(
+                    "Intent Description", 
+                    placeholder="Describe what this intent handles...",
+                    height=100
+                )
+            
+            col1, col2, col3 = st.columns([1, 1, 4])
+            with col1:
+                if st.button("💾 Save Intent"):
+                    if new_intent_name.strip() and new_intent_desc.strip():
+                        if new_intent_name not in intents:
+                            intents[new_intent_name] = new_intent_desc
+                            if save_intents(intents):
+                                st.success(f"✅ Added intent: {new_intent_name}")
+                                st.session_state.show_add_form = False
+                                # Clear cache to reload embeddings
+                                if 'cached_embeddings' in st.session_state:
+                                    st.session_state.cached_embeddings = {}
+                                st.rerun()
+                        else:
+                            st.error("Intent name already exists!")
+                    else:
+                        st.error("Please fill in both name and description.")
+            
+            with col2:
+                if st.button("❌ Cancel"):
+                    st.session_state.show_add_form = False
+                    st.rerun()
+    
+    # Display intents with edit capability
+    st.markdown(f"### 📋 Managing Intents ({total_intents} total)")
+    
+    if page_intents:
+        for i, (intent_name, intent_desc) in enumerate(page_intents):
+            with st.container():
+                # Check if this intent is being edited
+                is_editing = st.session_state.editing_intent == intent_name
+                
+                if is_editing:
+                    # Edit mode
+                    st.markdown(f"**✏️ Editing: {intent_name}**")
+                    
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        new_name = st.text_input(
+                            "Intent Name", 
+                            value=intent_name,
+                            key=f"edit_name_{intent_name}"
+                        )
+                    with col2:
+                        new_desc = st.text_area(
+                            "Intent Description", 
+                            value=intent_desc,
+                            height=100,
+                            key=f"edit_desc_{intent_name}"
+                        )
+                    
+                    col1, col2, col3 = st.columns([1, 1, 4])
+                    with col1:
+                        if st.button("💾 Save", key=f"save_{intent_name}"):
+                            if new_name.strip() and new_desc.strip():
+                                # Handle name change
+                                if new_name != intent_name:
+                                    if new_name in intents:
+                                        st.error("Intent name already exists!")
+                                        continue
+                                    # Remove old intent and add new one
+                                    del intents[intent_name]
+                                    intents[new_name] = new_desc
+                                else:
+                                    intents[intent_name] = new_desc
+                                
+                                if save_intents(intents):
+                                    st.success(f"✅ Updated intent: {new_name}")
+                                    st.session_state.editing_intent = None
+                                    # Clear cache to reload embeddings
+                                    if 'cached_embeddings' in st.session_state:
+                                        st.session_state.cached_embeddings = {}
+                                    st.rerun()
+                            else:
+                                st.error("Please fill in both name and description.")
+                    
+                    with col2:
+                        if st.button("❌ Cancel", key=f"cancel_{intent_name}"):
+                            st.session_state.editing_intent = None
+                            st.rerun()
+                else:
+                    # View mode
+                    col1, col2 = st.columns([5, 1])
+                    
+                    with col1:
+                        with st.expander(f"📋 {intent_name}", expanded=False):
+                            st.write(intent_desc)
+                    
+                    with col2:
+                        subcol1, subcol2 = st.columns(2)
+                        with subcol1:
+                            if st.button("✏️", key=f"edit_{intent_name}", help="Edit intent"):
+                                st.session_state.editing_intent = intent_name
+                                st.session_state.show_add_form = False
+                                st.rerun()
+                        
+                        with subcol2:
+                            if intent_name != "No_Intent_Match":  # Don't allow deleting the fallback intent
+                                if st.button("🗑️", key=f"delete_{intent_name}", help="Delete intent"):
+                                    if st.session_state.get(f"confirm_delete_{intent_name}", False):
+                                        del intents[intent_name]
+                                        if save_intents(intents):
+                                            st.success(f"🗑️ Deleted intent: {intent_name}")
+                                            # Clear cache to reload embeddings
+                                            if 'cached_embeddings' in st.session_state:
+                                                st.session_state.cached_embeddings = {}
+                                            st.rerun()
+                                    else:
+                                        st.session_state[f"confirm_delete_{intent_name}"] = True
+                                        st.warning(f"Click delete again to confirm removal of '{intent_name}'")
+                                        st.rerun()
+                
+                st.markdown("---")
+    
+    # Pagination controls
+    if total_pages > 1:
+        st.markdown("### 📄 Page Navigation")
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        
+        with col1:
+            if st.button("⏮️ First", disabled=(st.session_state.current_page == 0)):
+                st.session_state.current_page = 0
+                st.rerun()
+        
+        with col2:
+            if st.button("◀️ Prev", disabled=(st.session_state.current_page == 0)):
+                st.session_state.current_page -= 1
+                st.rerun()
+        
+        with col3:
+            st.markdown(f"**Page {st.session_state.current_page + 1} of {total_pages}**")
+            st.markdown(f"*Showing {start_idx + 1}-{end_idx} of {total_intents} intents*")
+        
+        with col4:
+            if st.button("▶️ Next", disabled=(st.session_state.current_page >= total_pages - 1)):
+                st.session_state.current_page += 1
+                st.rerun()
+        
+        with col5:
+            if st.button("⏭️ Last", disabled=(st.session_state.current_page >= total_pages - 1)):
+                st.session_state.current_page = total_pages - 1
+                st.rerun()
+    
+    # Export/Import section
+    st.markdown("### 📤 Export/Import")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📥 Export Intents", type="secondary"):
+            intent_json = json.dumps(intents, indent=2)
+            st.download_button(
+                "💾 Download intents.json",
+                data=intent_json,
+                file_name="vanguard_intents.json",
+                mime="application/json"
+            )
+    
+    with col2:
+        uploaded_intents = st.file_uploader(
+            "📤 Import Intents (JSON)",
+            type=['json'],
+            help="Upload a JSON file with intent definitions"
+        )
+        
+        if uploaded_intents is not None:
+            try:
+                imported_intents = json.load(uploaded_intents)
+                if isinstance(imported_intents, dict):
+                    if st.button("🔄 Import and Merge"):
+                        intents.update(imported_intents)
+                        if save_intents(intents):
+                            st.success(f"✅ Imported {len(imported_intents)} intents!")
+                            # Clear cache to reload embeddings
+                            if 'cached_embeddings' in st.session_state:
+                                st.session_state.cached_embeddings = {}
+                            st.rerun()
+                else:
+                    st.error("Invalid JSON format. Expected dictionary of intent_name: description")
+            except Exception as e:
+                st.error(f"Error importing intents: {str(e)}")
+    
+    return intents
     """Classify a single utterance and return detailed results"""
     try:
         # Preprocess utterance based on model type
@@ -554,6 +884,8 @@ def main():
         st.session_state.cached_model_id = None
     if 'cached_intents_hash' not in st.session_state:
         st.session_state.cached_intents_hash = None
+    if 'last_success_model' not in st.session_state:
+        st.session_state.last_success_model = None
     
     # Load model and intents
     with st.spinner(f"Initializing {selected_model_info['name']}..."):
@@ -588,9 +920,11 @@ def main():
                 st.session_state.cached_model_id = selected_model_info['model_id']
                 st.session_state.cached_intents_hash = intents_hash
                 
-                # Show success message only when computing new embeddings
-                if intent_embeddings is not None:
+                # Show success message only once per model
+                if (intent_embeddings is not None and 
+                    st.session_state.last_success_model != selected_model_info['model_id']):
                     st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
+                    st.session_state.last_success_model = selected_model_info['model_id']
         else:
             intent_embeddings = st.session_state.cached_embeddings['intent_embeddings']
         
@@ -765,11 +1099,12 @@ def main():
         st.markdown("## ⚙️ Manage Intents")
         st.markdown("*Add, edit, and manage your intent categories*")
         
-        # Intent management interface
-        st.markdown("### Current Intents")
-        for intent_name, intent_desc in intents.items():
-            with st.expander(f"📋 {intent_name}"):
-                st.write(intent_desc)
+        # Use the comprehensive intent manager
+        updated_intents = render_intent_manager(intents)
+        
+        # Update intents if they've been modified
+        if updated_intents != intents:
+            intents = updated_intents
 
 if __name__ == "__main__":
     main()
