@@ -587,11 +587,12 @@ def main():
                 st.session_state.cached_embeddings['intent_embeddings'] = intent_embeddings
                 st.session_state.cached_model_id = selected_model_info['model_id']
                 st.session_state.cached_intents_hash = intents_hash
+                
+                # Show success message only when computing new embeddings
+                if intent_embeddings is not None:
+                    st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
         else:
             intent_embeddings = st.session_state.cached_embeddings['intent_embeddings']
-            
-        if intent_embeddings is not None:
-            st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
         
     st.success(f"✅ System ready with {selected_model_info['name']}! ({len(intent_names)} intents loaded)")
     
@@ -600,9 +601,6 @@ def main():
     
     with tab1:
         st.markdown("## Intent Classification")
-        
-        # Show confidence legend prominently
-        render_confidence_legend()
         
         # Single utterance classification
         st.markdown("### Single Utterance Classification")
@@ -728,6 +726,10 @@ def main():
                         
                 except Exception as e:
                     st.error(f"Error processing file: {str(e)}")
+        
+        # Show confidence legend at the bottom for reference
+        st.markdown("---")
+        render_confidence_legend()
     
     with tab2:
         st.markdown("## 📊 Analysis Tools")
