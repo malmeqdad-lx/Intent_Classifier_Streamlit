@@ -1,4 +1,4 @@
-# 🎯 Find My Intent - BGE Enhanced
+# 🎯 Find My Intent
 
 An AI-powered intent classification app using state-of-the-art BGE (BAAI General Embedding) models for superior semantic understanding.
 

@@ -13,7 +13,7 @@ from typing import Dict, List, Tuple, Any, Optional
 
 # CRITICAL: Move page config to the very top before any other Streamlit calls
 st.set_page_config(
-    page_title="Find My Intent - BGE Enhanced",
+    page_title="Find My Intent",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -356,18 +356,12 @@ def classify_utterance(
 def main():
     """Main application logic"""
     
-    # Header with BGE branding
+    # Clean header
     st.markdown("""
     <h1 style='text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 3em;'>
-    🎯 Find My Intent - BGE Enhanced
+    🎯 Find My Intent
     </h1>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class='success-message'>
-    <center>Now powered by <span class='bge-badge'>BGE-large-en-v1.5</span> - State-of-the-art semantic understanding</center>
-    </div>
     """, unsafe_allow_html=True)
     
     # Model selection in sidebar
@@ -579,17 +573,195 @@ def main():
     
     with tab2:
         st.header("📊 Intent Analysis Tools")
-        st.info("🚧 Advanced analysis features coming soon with BGE optimization!")
         
-        # Placeholder for analysis tools
-        st.markdown("""
-        ### Planned Features:
-        - Intent confusion matrix with BGE embeddings
-        - Semantic similarity heatmap
-        - Intent clustering visualization
-        - Description quality scoring
-        - Auto-suggestion for better descriptions
-        """)
+        # Intent Similarity Analysis
+        st.markdown("### 🔍 Intent Similarity Analysis")
+        st.write("Discover which intents might be confused with each other based on semantic similarity.")
+        
+        # Similarity threshold slider
+        similarity_threshold = st.slider(
+            "Similarity Threshold", 
+            min_value=0.5, 
+            max_value=0.95, 
+            value=0.75,
+            step=0.05,
+            help="Intents with similarity above this threshold will be flagged as potentially confusing"
+        )
+        
+        if st.button("🔄 Analyze Intent Similarities", type="primary"):
+            with st.spinner("Analyzing intent similarities..."):
+                # Compute similarity matrix
+                intent_embeddings_tensor = torch.tensor(intent_embeddings)
+                similarity_matrix = util.cos_sim(intent_embeddings_tensor, intent_embeddings_tensor)
+                
+                # Find similar intent pairs
+                similar_pairs = []
+                for i in range(len(intent_names)):
+                    for j in range(i + 1, len(intent_names)):
+                        similarity = float(similarity_matrix[i][j])
+                        if similarity >= similarity_threshold:
+                            similar_pairs.append({
+                                'Intent 1': intent_names[i],
+                                'Intent 2': intent_names[j],
+                                'Similarity': similarity
+                            })
+                
+                # Sort by similarity
+                similar_pairs.sort(key=lambda x: x['Similarity'], reverse=True)
+                
+                if similar_pairs:
+                    st.warning(f"⚠️ Found {len(similar_pairs)} potentially confusing intent pairs")
+                    
+                    # Display results
+                    for idx, pair in enumerate(similar_pairs[:20], 1):  # Show top 20
+                        similarity_pct = pair['Similarity'] * 100
+                        
+                        # Color code based on similarity level
+                        if pair['Similarity'] >= 0.9:
+                            color = "#ff4444"  # Red for very high similarity
+                            icon = "🔴"
+                        elif pair['Similarity'] >= 0.8:
+                            color = "#ff8800"  # Orange for high similarity
+                            icon = "🟠"
+                        else:
+                            color = "#ffaa00"  # Yellow for moderate similarity
+                            icon = "🟡"
+                        
+                        # Create expandable section for each pair
+                        with st.expander(f"{icon} **{pair['Intent 1']}** ↔️ **{pair['Intent 2']}** ({similarity_pct:.1f}% similar)"):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.markdown(f"**{pair['Intent 1']}**")
+                                st.write(intents[pair['Intent 1']])
+                            
+                            with col2:
+                                st.markdown(f"**{pair['Intent 2']}**")
+                                st.write(intents[pair['Intent 2']])
+                            
+                            st.markdown(f"""
+                            <div style='padding: 10px; background: {color}20; border-left: 4px solid {color}; margin-top: 10px;'>
+                            <strong>Recommendation:</strong> Review these intent descriptions to ensure they are sufficiently distinct. 
+                            Consider adding more specific keywords or examples to differentiate them.
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Test utterance against both intents
+                            test_utterance = st.text_input(
+                                "Test an utterance against both intents:",
+                                key=f"test_pair_{idx}",
+                                placeholder="Enter text to see which intent scores higher..."
+                            )
+                            
+                            if test_utterance:
+                                result = classify_utterance(
+                                    test_utterance, model, selected_model,
+                                    intent_names, intent_embeddings
+                                )
+                                
+                                # Find scores for both intents
+                                scores = {}
+                                for res in result['top_results']:
+                                    if res['intent'] in [pair['Intent 1'], pair['Intent 2']]:
+                                        scores[res['intent']] = res['confidence']
+                                
+                                # Display comparison
+                                if scores:
+                                    st.markdown("**Classification Results:**")
+                                    for intent, score in scores.items():
+                                        st.write(f"- {intent}: {score:.3%}")
+                                    
+                                    # Show which one wins
+                                    if len(scores) == 2:
+                                        winner = max(scores, key=scores.get)
+                                        margin = abs(scores[pair['Intent 1']] - scores[pair['Intent 2']])
+                                        st.success(f"✅ **{winner}** scores higher (margin: {margin:.3%})")
+                    
+                    # Download similar pairs as CSV
+                    if st.button("📥 Download Similarity Report"):
+                        df_similar = pd.DataFrame(similar_pairs)
+                        csv = df_similar.to_csv(index=False)
+                        st.download_button(
+                            "Download CSV",
+                            csv,
+                            f"intent_similarity_report_{similarity_threshold}.csv",
+                            "text/csv"
+                        )
+                else:
+                    st.success(f"✅ No confusing intent pairs found at {similarity_threshold:.0%} threshold")
+                    st.info("Try lowering the threshold to find more subtle similarities.")
+        
+        # Intent Coverage Analysis
+        st.markdown("### 📈 Intent Coverage Analysis")
+        st.write("Test multiple utterances to see coverage across your intent library.")
+        
+        test_utterances_text = st.text_area(
+            "Enter test utterances (one per line):",
+            height=150,
+            placeholder="I want to check my balance\nTransfer money to savings\nSpeak to customer service\nWhat's my 401k worth?"
+        )
+        
+        if st.button("🎯 Analyze Coverage"):
+            if test_utterances_text:
+                test_utterances_list = [u.strip() for u in test_utterances_text.split('\n') if u.strip()]
+                
+                with st.spinner(f"Analyzing {len(test_utterances_list)} utterances..."):
+                    coverage_results = []
+                    intent_hits = {}
+                    
+                    for utterance in test_utterances_list:
+                        result = classify_utterance(
+                            utterance, model, selected_model,
+                            intent_names, intent_embeddings
+                        )
+                        
+                        coverage_results.append({
+                            'Utterance': utterance[:50] + '...' if len(utterance) > 50 else utterance,
+                            'Top Intent': result['final_intent'],
+                            'Confidence': result['best_confidence'],
+                            'Status': result['status_text']
+                        })
+                        
+                        # Track intent hits
+                        top_intent = result['final_intent']
+                        if top_intent not in intent_hits:
+                            intent_hits[top_intent] = 0
+                        intent_hits[top_intent] += 1
+                    
+                    # Display results
+                    col1, col2 = st.columns([2, 1])
+                    
+                    with col1:
+                        st.markdown("#### Classification Results")
+                        df_coverage = pd.DataFrame(coverage_results)
+                        st.dataframe(df_coverage, use_container_width=True)
+                    
+                    with col2:
+                        st.markdown("#### Intent Distribution")
+                        # Sort intents by frequency
+                        sorted_intents = sorted(intent_hits.items(), key=lambda x: x[1], reverse=True)
+                        for intent, count in sorted_intents[:10]:
+                            st.write(f"**{intent}**: {count} ({count/len(test_utterances_list)*100:.0f}%)")
+                    
+                    # Summary metrics
+                    st.markdown("#### Summary Metrics")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        high_conf = sum(1 for r in coverage_results if r['Confidence'] >= 0.6)
+                        st.metric("High Confidence", f"{high_conf}/{len(coverage_results)}")
+                    
+                    with col2:
+                        unique_intents = len(intent_hits)
+                        st.metric("Unique Intents Hit", unique_intents)
+                    
+                    with col3:
+                        avg_conf = sum(r['Confidence'] for r in coverage_results) / len(coverage_results)
+                        st.metric("Avg Confidence", f"{avg_conf:.1%}")
+                    
+                    with col4:
+                        no_match = sum(1 for r in coverage_results if r['Top Intent'] == 'No_Intent_Match')
+                        st.metric("No Match", no_match)
     
     with tab3:
         st.header("⚙️ Intent Management")
@@ -603,7 +775,7 @@ def main():
         with col3:
             st.metric("Embedding Dims", selected_model_info['dimensions'])
         
-        # Intent viewer
+        # Intent viewer with pagination
         st.markdown("### 📋 Current Intents")
         
         # Search functionality
@@ -614,24 +786,64 @@ def main():
                           if search_term.lower() in k.lower() or 
                           search_term.lower() in v.lower()}
         
-        # Display intents
+        # Pagination settings
+        intents_per_page = st.selectbox(
+            "Intents per page:",
+            options=[10, 25, 50, 100, len(filtered_intents)],
+            format_func=lambda x: "All" if x == len(filtered_intents) else str(x),
+            index=1  # Default to 25
+        )
+        
+        # Calculate pagination
+        total_filtered = len(filtered_intents)
+        total_pages = max(1, (total_filtered + intents_per_page - 1) // intents_per_page) if intents_per_page != total_filtered else 1
+        
+        # Page selector
+        if total_pages > 1:
+            page = st.number_input(
+                f"Page (1-{total_pages})",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1
+            )
+        else:
+            page = 1
+        
+        # Calculate start and end indices
+        start_idx = (page - 1) * intents_per_page if intents_per_page != total_filtered else 0
+        end_idx = min(start_idx + intents_per_page, total_filtered) if intents_per_page != total_filtered else total_filtered
+        
+        # Display current page info
         if filtered_intents:
-            for intent_name, intent_desc in list(filtered_intents.items())[:10]:
-                with st.expander(f"**{intent_name}**"):
+            st.info(f"📊 Showing {start_idx + 1}-{end_idx} of {total_filtered} intents" + 
+                   (f" (filtered from {len(intents)} total)" if search_term else ""))
+            
+            # Get intents for current page
+            filtered_items = list(filtered_intents.items())
+            page_items = filtered_items[start_idx:end_idx]
+            
+            # Display intents
+            for intent_name, intent_desc in page_items:
+                with st.expander(f"**{intent_name}**", expanded=False):
+                    # Intent description
+                    st.write("**Description:**")
                     st.write(intent_desc)
                     
                     # Test this intent
+                    st.markdown("---")
                     test_utterance = st.text_input(
-                        "Test utterance:", 
+                        "Test utterance against this intent:", 
                         key=f"test_{intent_name}",
-                        placeholder="Enter text to test against this intent"
+                        placeholder="Enter text to test..."
                     )
                     
                     if test_utterance:
-                        result = classify_utterance(
-                            test_utterance, model, selected_model,
-                            intent_names, intent_embeddings
-                        )
+                        with st.spinner("Classifying..."):
+                            result = classify_utterance(
+                                test_utterance, model, selected_model,
+                                intent_names, intent_embeddings
+                            )
                         
                         # Find this intent in results
                         intent_rank = None
@@ -642,24 +854,72 @@ def main():
                                 intent_conf = res['confidence']
                                 break
                         
-                        if intent_rank:
-                            st.success(f"Rank: #{intent_rank} | Confidence: {intent_conf:.3%}")
-                        else:
-                            st.error("Not in top 5 results")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if intent_rank:
+                                if intent_rank == 1:
+                                    st.success(f"✅ Rank: #{intent_rank}")
+                                else:
+                                    st.warning(f"⚠️ Rank: #{intent_rank}")
+                            else:
+                                st.error("❌ Not in top 5")
+                        
+                        with col2:
+                            if intent_conf:
+                                conf_color = "🟢" if intent_conf >= 0.6 else "🟡" if intent_conf >= 0.4 else "🟠"
+                                st.write(f"{conf_color} Confidence: {intent_conf:.3%}")
+                        
+                        # Show what was the top intent if not this one
+                        if intent_rank != 1:
+                            st.info(f"Top match: **{result['final_intent']}** ({result['best_confidence']:.3%})")
+            
+            # Page navigation buttons
+            if total_pages > 1:
+                st.markdown("---")
+                col1, col2, col3 = st.columns([1, 2, 1])
+                
+                with col1:
+                    if page > 1:
+                        if st.button("⬅️ Previous", use_container_width=True):
+                            st.rerun()
+                
+                with col2:
+                    st.markdown(f"<center>Page {page} of {total_pages}</center>", unsafe_allow_html=True)
+                
+                with col3:
+                    if page < total_pages:
+                        if st.button("Next ➡️", use_container_width=True):
+                            st.rerun()
         else:
             st.warning("No intents found matching your search")
+        
+        # Quick stats about filtered results
+        if search_term and filtered_intents:
+            st.markdown("### 🔎 Search Results Summary")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Matching Intents", len(filtered_intents))
+            with col2:
+                st.metric("Match Rate", f"{len(filtered_intents)/len(intents)*100:.1f}%")
         
         # Export/Import section
         st.markdown("### 💾 Export/Import")
         col1, col2 = st.columns(2)
         
         with col1:
+            export_option = st.radio(
+                "Export:",
+                ["All Intents", "Filtered Intents Only"],
+                horizontal=True
+            )
+            
             if st.button("📥 Export Intents", use_container_width=True):
-                intents_json = json.dumps(intents, indent=2)
+                export_data = intents if export_option == "All Intents" else filtered_intents
+                intents_json = json.dumps(export_data, indent=2)
                 st.download_button(
-                    "Download JSON",
+                    f"Download JSON ({len(export_data)} intents)",
                     intents_json,
-                    "intents_export.json",
+                    f"intents_export_{'all' if export_option == 'All Intents' else 'filtered'}.json",
                     "application/json",
                     use_container_width=True
                 )
@@ -678,7 +938,7 @@ def main():
                         # Save to file
                         with open('vanguard_intents.json', 'w') as f:
                             json.dump(new_intents, f, indent=2)
-                        st.success("✅ Intents imported successfully! Refresh to apply.")
+                        st.success(f"✅ Imported {len(new_intents)} intents successfully! Refresh to apply.")
                         st.balloons()
                     except Exception as e:
                         st.error(f"Error importing: {str(e)}")
