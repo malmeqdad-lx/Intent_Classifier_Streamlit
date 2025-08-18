@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Model Configuration with BGE-large-en-v1.5 as primary model
+# Model Configuration with all available models
 AVAILABLE_MODELS = {
     "BAAI/bge-large-en-v1.5": {
         "name": "BGE-large-en-v1.5 (State-of-the-Art)",
@@ -31,7 +31,7 @@ AVAILABLE_MODELS = {
         "description": "Top-ranked model on MTEB leaderboard. Best semantic understanding for intent classification. Recommended for production use."
     },
     "BAAI/bge-base-en-v1.5": {
-        "name": "BGE-base-en-v1.5 (Balanced)",
+        "name": "BGE-base-en-v1.5 (High Quality)",
         "model_id": "BAAI/bge-base-en-v1.5",
         "size": "~440MB",
         "dimensions": 768,
@@ -39,23 +39,32 @@ AVAILABLE_MODELS = {
         "quality": "🟢 Excellent",
         "description": "Smaller BGE model with excellent balance of speed and quality. Great for real-time applications."
     },
+    "intfloat/e5-base-v2": {
+        "name": "E5-Base-v2 (High Quality)",
+        "model_id": "intfloat/e5-base-v2",
+        "size": "~440MB",
+        "dimensions": 768,
+        "speed": "🟡 Moderate",
+        "quality": "🟢 Excellent",
+        "description": "State-of-the-art semantic search performance. Requires 'query:' prefix for optimal results."
+    },
     "all-mpnet-base-v2": {
-        "name": "MPNet-Base-v2 (Classic)",
+        "name": "MPNet-Base-v2 (Balanced)",
         "model_id": "all-mpnet-base-v2",
         "size": "~420MB",
         "dimensions": 768,
-        "speed": "🟡 Good",
+        "speed": "🟡 Moderate",
         "quality": "🟢 Very Good",
-        "description": "Well-established model with proven reliability. Good fallback option."
+        "description": "Best balance of quality and performance. Recommended by SBERT for high-quality embeddings."
     },
     "all-MiniLM-L6-v2": {
-        "name": "MiniLM-L6-v2 (Lightweight)",
+        "name": "MiniLM-L6-v2 (Fast & Lightweight)",
         "model_id": "all-MiniLM-L6-v2",
         "size": "~90MB",
         "dimensions": 384,
         "speed": "⚡ Very Fast",
         "quality": "🟡 Good",
-        "description": "Fastest option for resource-constrained environments. Trade-off between speed and accuracy."
+        "description": "Lightweight model optimized for speed. Good for real-time applications with resource constraints."
     }
 }
 
@@ -170,9 +179,9 @@ def clear_model_cache():
         torch.cuda.empty_cache()
     gc.collect()
 
-def preprocess_text_for_bge(text: str, model_id: str, text_type: str = "query") -> str:
+def preprocess_text_for_model(text: str, model_id: str, text_type: str = "query") -> str:
     """
-    Preprocess text for BGE models which require specific prefixes
+    Preprocess text for different models which may require specific prefixes
     
     Args:
         text: Input text
@@ -189,9 +198,18 @@ def preprocess_text_for_bge(text: str, model_id: str, text_type: str = "query") 
         else:
             # For intent descriptions (passages/documents)
             return text  # BGE models don't require prefix for passages
-    return text
+    elif "e5" in model_id.lower():
+        if text_type == "query":
+            # E5 models require "query:" prefix for queries
+            return f"query: {text}"
+        else:
+            # E5 models require "passage:" prefix for passages
+            return f"passage: {text}"
+    else:
+        # Other models (MPNet, MiniLM) don't require prefixes
+        return text
 
-@st.cache_resource(show_spinner="Loading BGE embedding model... This may take a moment for first-time download.")
+@st.cache_resource(show_spinner="Loading embedding model... This may take a moment for first-time download.")
 def load_model(model_id: str) -> Optional[SentenceTransformer]:
     """Load the selected embedding model with caching"""
     clear_model_cache()
@@ -199,26 +217,35 @@ def load_model(model_id: str) -> Optional[SentenceTransformer]:
     try:
         start_time = time.time()
         
-        # Load model with specific settings for BGE
+        # Load model with specific settings
         if "bge" in model_id.lower():
             model = SentenceTransformer(model_id, device='cpu')
             # BGE models work best with normalized embeddings
             model.max_seq_length = 512  # BGE supports up to 512 tokens
+            model_type = "BGE"
+        elif "e5" in model_id.lower():
+            model = SentenceTransformer(model_id, device='cpu')
+            # E5 models also support 512 tokens and normalized embeddings
+            model.max_seq_length = 512
+            model_type = "E5"
         else:
             model = SentenceTransformer(model_id)
+            model_type = "Standard"
         
         load_time = time.time() - start_time
         
         # Display success with model info
-        if "bge" in model_id.lower():
+        if model_type == "BGE":
             st.success(f"✅ BGE Model loaded successfully in {load_time:.1f}s | Max sequence: 512 tokens")
+        elif model_type == "E5":
+            st.success(f"✅ E5 Model loaded successfully in {load_time:.1f}s | Max sequence: 512 tokens | Requires query/passage prefixes")
         else:
             st.success(f"✅ Model loaded in {load_time:.1f}s")
         
         return model
     except Exception as e:
         st.error(f"❌ Error loading model {model_id}: {str(e)}")
-        st.info("💡 Tip: If this is your first time loading BGE-large, it needs to download ~1.3GB. Please be patient.")
+        st.info("💡 Tip: If this is your first time loading this model, it needs to download. Please be patient.")
         return None
 
 @st.cache_data(show_spinner="Loading intent definitions...")
@@ -240,10 +267,10 @@ def load_intents() -> Dict[str, str]:
         }
         return default_intents
 
-@st.cache_data(show_spinner="Computing intent embeddings with BGE model...")
+@st.cache_data(show_spinner="Computing intent embeddings...")
 def compute_intent_embeddings(_model: SentenceTransformer, model_id: str, intent_descriptions: List[str]) -> np.ndarray:
     """
-    Compute embeddings for all intent descriptions with BGE preprocessing
+    Compute embeddings for all intent descriptions with model-specific preprocessing
     
     Args:
         _model: The sentence transformer model
@@ -253,9 +280,9 @@ def compute_intent_embeddings(_model: SentenceTransformer, model_id: str, intent
     Returns:
         Numpy array of intent embeddings
     """
-    # Preprocess descriptions for BGE models (as passages)
+    # Preprocess descriptions for specific models (as passages)
     processed_descriptions = [
-        preprocess_text_for_bge(desc, model_id, "passage") 
+        preprocess_text_for_model(desc, model_id, "passage") 
         for desc in intent_descriptions
     ]
     
@@ -263,7 +290,7 @@ def compute_intent_embeddings(_model: SentenceTransformer, model_id: str, intent
     embeddings = _model.encode(
         processed_descriptions, 
         convert_to_tensor=True,
-        normalize_embeddings=True,  # Important for BGE models
+        normalize_embeddings=True,  # Important for BGE and E5 models
         show_progress_bar=True
     )
     
@@ -277,7 +304,7 @@ def classify_utterance(
     intent_embeddings: np.ndarray
 ) -> Dict[str, Any]:
     """
-    Classify utterance using BGE-enhanced semantic similarity
+    Classify utterance using semantic similarity with model-specific preprocessing
     
     Args:
         utterance: User input text
@@ -289,8 +316,8 @@ def classify_utterance(
     Returns:
         Dictionary containing classification results
     """
-    # Preprocess utterance for BGE models (as query)
-    processed_utterance = preprocess_text_for_bge(utterance, model_id, "query")
+    # Preprocess utterance for specific models (as query)
+    processed_utterance = preprocess_text_for_model(utterance, model_id, "query")
     
     # Get embeddings with normalization
     utterance_embedding = model.encode(
@@ -319,7 +346,7 @@ def classify_utterance(
             'index': idx_int
         })
     
-    # Determine classification level with BGE-optimized thresholds
+    # Determine classification level with optimized thresholds
     best_confidence = top_results[0]['confidence']
     best_intent = top_results[0]['intent']
     
@@ -387,7 +414,7 @@ def main():
         st.markdown(f"**Dimensions:** {selected_model_info['dimensions']}")
         st.info(selected_model_info['description'])
         
-        # BGE-specific tips
+        # Model-specific tips
         if "bge" in selected_model.lower():
             st.markdown("### 💡 BGE Tips")
             st.markdown("""
@@ -395,6 +422,22 @@ def main():
             - Best for semantic similarity tasks
             - Normalized embeddings for accuracy
             - Supports up to 512 tokens
+            """)
+        elif "e5" in selected_model.lower():
+            st.markdown("### 💡 E5 Tips")
+            st.markdown("""
+            - E5 requires "query:" and "passage:" prefixes
+            - Excellent for semantic search
+            - State-of-the-art retrieval performance
+            - Supports up to 512 tokens
+            """)
+        elif "mpnet" in selected_model.lower():
+            st.markdown("### 💡 MPNet Tips")
+            st.markdown("""
+            - Balanced speed and quality
+            - No special prefixes needed
+            - Recommended by SBERT team
+            - Good general-purpose model
             """)
     
     # Initialize session state
@@ -475,9 +518,9 @@ def main():
         with col1:
             if st.button("🎯 Classify", type="primary", use_container_width=True):
                 if user_input.strip():
-                    with st.spinner("🧠 Analyzing with BGE model..."):
+                    with st.spinner("🧠 Analyzing with selected model..."):
                         result = classify_utterance(
-                            user_input, model, selected_model, 
+                            user_input, model, selected_model_info['model_id'], 
                             intent_names, intent_embeddings
                         )
                     
@@ -544,7 +587,7 @@ def main():
                 for i, utt in enumerate(utterances):
                     if utt.strip():
                         result = classify_utterance(
-                            utt, model, selected_model,
+                            utt, model, selected_model_info['model_id'],
                             intent_names, intent_embeddings
                         )
                         results.append({
@@ -655,7 +698,7 @@ def main():
                             
                             if test_utterance:
                                 result = classify_utterance(
-                                    test_utterance, model, selected_model,
+                                    test_utterance, model, selected_model_info['model_id'],
                                     intent_names, intent_embeddings
                                 )
                                 
@@ -711,7 +754,7 @@ def main():
                     
                     for utterance in test_utterances_list:
                         result = classify_utterance(
-                            utterance, model, selected_model,
+                            utterance, model, selected_model_info['model_id'],
                             intent_names, intent_embeddings
                         )
                         
@@ -775,7 +818,35 @@ def main():
         with col3:
             st.metric("Embedding Dims", selected_model_info['dimensions'])
         
-        # Intent viewer with pagination
+        # Add new intent section
+        st.markdown("### ➕ Add New Intent")
+        with st.expander("Add Intent", expanded=False):
+            new_intent_name = st.text_input("Intent Name:", placeholder="e.g., Check_Balance")
+            new_intent_desc = st.text_area(
+                "Intent Description:", 
+                placeholder="e.g., User wants to check their account balance or see how much money they have",
+                height=100
+            )
+            
+            if st.button("➕ Add Intent", type="primary"):
+                if new_intent_name and new_intent_desc:
+                    if new_intent_name not in intents:
+                        # Add to intents
+                        intents[new_intent_name] = new_intent_desc
+                        
+                        # Save to file
+                        with open('vanguard_intents.json', 'w') as f:
+                            json.dump(intents, f, indent=2)
+                        
+                        st.success(f"✅ Added intent: {new_intent_name}")
+                        st.info("Refresh the page to update embeddings with the new intent")
+                        st.balloons()
+                    else:
+                        st.error(f"Intent '{new_intent_name}' already exists!")
+                else:
+                    st.warning("Please provide both intent name and description")
+        
+        # Intent viewer with editing capabilities
         st.markdown("### 📋 Current Intents")
         
         # Search functionality
@@ -823,25 +894,65 @@ def main():
             filtered_items = list(filtered_intents.items())
             page_items = filtered_items[start_idx:end_idx]
             
-            # Display intents
+            # Display intents with edit/delete options
             for intent_name, intent_desc in page_items:
                 with st.expander(f"**{intent_name}**", expanded=False):
-                    # Intent description
-                    st.write("**Description:**")
-                    st.write(intent_desc)
+                    # Create unique keys for this intent
+                    edit_key = f"edit_{intent_name}"
+                    desc_key = f"desc_{intent_name}"
+                    test_key = f"test_{intent_name}"
                     
-                    # Test this intent
+                    # Edit mode toggle
+                    edit_mode = st.checkbox("✏️ Edit mode", key=edit_key)
+                    
+                    if edit_mode:
+                        # Editable description
+                        new_desc = st.text_area(
+                            "Description:",
+                            value=intent_desc,
+                            key=desc_key,
+                            height=100
+                        )
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("💾 Save Changes", key=f"save_{intent_name}"):
+                                if new_desc != intent_desc:
+                                    intents[intent_name] = new_desc
+                                    # Save to file
+                                    with open('vanguard_intents.json', 'w') as f:
+                                        json.dump(intents, f, indent=2)
+                                    st.success("✅ Changes saved! Refresh to update embeddings.")
+                                else:
+                                    st.info("No changes detected")
+                        
+                        with col2:
+                            if st.button("🗑️ Delete Intent", key=f"delete_{intent_name}", type="secondary"):
+                                # Confirm deletion
+                                if st.checkbox(f"⚠️ Confirm deletion of '{intent_name}'", key=f"confirm_{intent_name}"):
+                                    del intents[intent_name]
+                                    # Save to file
+                                    with open('vanguard_intents.json', 'w') as f:
+                                        json.dump(intents, f, indent=2)
+                                    st.success(f"✅ Deleted intent: {intent_name}")
+                                    st.rerun()
+                    else:
+                        # View mode - show description
+                        st.write("**Description:**")
+                        st.write(intent_desc)
+                    
+                    # Test section (always visible)
                     st.markdown("---")
                     test_utterance = st.text_input(
                         "Test utterance against this intent:", 
-                        key=f"test_{intent_name}",
+                        key=test_key,
                         placeholder="Enter text to test..."
                     )
                     
                     if test_utterance:
                         with st.spinner("Classifying..."):
                             result = classify_utterance(
-                                test_utterance, model, selected_model,
+                                test_utterance, model, selected_model_info['model_id'],
                                 intent_names, intent_embeddings
                             )
                         
@@ -935,10 +1046,30 @@ def main():
                 if st.button("📤 Import Intents", use_container_width=True):
                     try:
                         new_intents = json.load(uploaded_intents)
+                        # Option to merge or replace
+                        import_mode = st.radio(
+                            "Import mode:",
+                            ["Replace All", "Merge (Add New Only)"],
+                            horizontal=True
+                        )
+                        
+                        if import_mode == "Replace All":
+                            intents = new_intents
+                            action = "replaced with"
+                        else:
+                            # Merge - only add new intents
+                            added = 0
+                            for k, v in new_intents.items():
+                                if k not in intents:
+                                    intents[k] = v
+                                    added += 1
+                            action = f"merged ({added} new added) with"
+                        
                         # Save to file
                         with open('vanguard_intents.json', 'w') as f:
-                            json.dump(new_intents, f, indent=2)
-                        st.success(f"✅ Imported {len(new_intents)} intents successfully! Refresh to apply.")
+                            json.dump(intents, f, indent=2)
+                        
+                        st.success(f"✅ Successfully {action} {len(new_intents)} intents! Refresh to apply.")
                         st.balloons()
                     except Exception as e:
                         st.error(f"Error importing: {str(e)}")
