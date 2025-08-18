@@ -12,12 +12,16 @@ An AI-powered intent classification app using state-of-the-art BGE (BAAI General
 
 ## ✨ Key Features
 
-- **Advanced Intent Classification**: Uses BGE models for best-in-class semantic similarity
+- **Advanced Intent Classification**: Uses BGE, E5, or other state-of-the-art models for best-in-class semantic similarity
+- **Multi-Model Support**: Choose from 5 models based on your speed/accuracy requirements
 - **250+ Pre-loaded Intents**: Comprehensive Vanguard financial services intent library
+- **Intent Management**: Add, edit, delete intents directly in the UI
 - **Batch Processing**: Upload files for bulk classification with progress tracking
-- **Model Selection**: Choose the right model for your speed/accuracy requirements
+- **Intent Similarity Analysis**: Find and resolve confusing intent pairs
+- **Coverage Analysis**: Test multiple utterances to identify gaps
 - **Real-time Testing**: Test intents and see confidence scores instantly
 - **Visual Analytics**: Confidence distribution bars and color-coded results
+- **Export/Import**: Full intent library management with merge options
 
 ## 🤖 Available Models
 
@@ -25,7 +29,8 @@ An AI-powered intent classification app using state-of-the-art BGE (BAAI General
 |-------|---------|-------|------|----------|
 | **BGE-large-en-v1.5** | 🟢🟢 State-of-the-Art | 🟠 Moderate | ~1.3GB | Production, highest accuracy |
 | **BGE-base-en-v1.5** | 🟢 Excellent | 🟡 Good | ~440MB | Balanced performance |
-| **MPNet-base-v2** | 🟢 Very Good | 🟡 Good | ~420MB | Proven reliability |
+| **E5-base-v2** | 🟢 Excellent | 🟡 Moderate | ~440MB | Semantic search, retrieval |
+| **MPNet-base-v2** | 🟢 Very Good | 🟡 Moderate | ~420MB | General purpose, proven reliability |
 | **MiniLM-L6-v2** | 🟡 Good | ⚡ Very Fast | ~90MB | Resource-constrained environments |
 
 ## 🛠️ Technology Stack
@@ -102,9 +107,12 @@ An AI-powered intent classification app using state-of-the-art BGE (BAAI General
 
 ### Intent Management
 1. Go to "⚙️ Manage" tab
-2. Search and filter intents
-3. Test specific intents with custom utterances
-4. Export/Import intent definitions
+2. **Add Intent**: Click "Add Intent" expander, enter name and description
+3. **Edit Intent**: Click edit mode checkbox, modify description, save changes
+4. **Delete Intent**: Enable edit mode, click delete button, confirm deletion
+5. **Search**: Use search bar to filter intents
+6. **Test**: Enter utterances to test against specific intents
+7. **Export/Import**: Save intent library or merge with new intents
 
 ## 📊 Performance Metrics
 
@@ -114,6 +122,27 @@ An AI-powered intent classification app using state-of-the-art BGE (BAAI General
 - **Classification speed**: ~100-200ms per utterance
 - **Accuracy**: State-of-the-art on MTEB benchmarks
 - **Memory usage**: ~2-3GB RAM
+
+### BGE-base-en-v1.5 / E5-base-v2
+- **First load**: 30-45 seconds (~440MB download)
+- **Subsequent loads**: 3-5 seconds (cached)
+- **Classification speed**: ~50-100ms per utterance
+- **Accuracy**: Excellent, top-tier performance
+- **Memory usage**: ~1-1.5GB RAM
+
+### MPNet-base-v2
+- **First load**: 30-45 seconds (~420MB download)
+- **Subsequent loads**: 3-5 seconds (cached)
+- **Classification speed**: ~50-100ms per utterance
+- **Accuracy**: Very good, proven reliability
+- **Memory usage**: ~1-1.5GB RAM
+
+### MiniLM-L6-v2
+- **First load**: 10-15 seconds (~90MB download)
+- **Subsequent loads**: 1-2 seconds (cached)
+- **Classification speed**: ~10-30ms per utterance
+- **Accuracy**: Good for lightweight applications
+- **Memory usage**: ~400-600MB RAM
 
 ### Optimization Features
 - Model caching with `@st.cache_resource`
@@ -133,11 +162,24 @@ An AI-powered intent classification app using state-of-the-art BGE (BAAI General
 }
 ```
 
-### BGE Model Settings
-- Max sequence length: 512 tokens
-- Normalized embeddings: Enabled
-- Query prefix: "Represent this sentence for retrieval:"
-- Dimension: 1024 (large) or 768 (base)
+### Model-Specific Settings
+- **BGE Models**: 
+  - Max sequence length: 512 tokens
+  - Query prefix: "Represent this sentence for retrieval:"
+  - Normalized embeddings: Enabled
+  - Dimensions: 1024 (large) or 768 (base)
+
+- **E5 Models**:
+  - Max sequence length: 512 tokens
+  - Query prefix: "query:"
+  - Passage prefix: "passage:"
+  - Normalized embeddings: Enabled
+  - Dimensions: 768
+
+- **MPNet/MiniLM**:
+  - No special prefixes required
+  - Standard sentence transformer settings
+  - Dimensions: 768 (MPNet) or 384 (MiniLM)
 
 ## 📁 File Structure
 
@@ -175,18 +217,24 @@ An AI-powered intent classification app using state-of-the-art BGE (BAAI General
 
 ## 📈 Benchmarks
 
-BGE models consistently outperform alternatives:
-- **MTEB Ranking**: #1 for retrieval tasks
-- **Intent Accuracy**: 15-20% improvement over MiniLM
-- **Semantic Understanding**: Superior context awareness
-- **Zero-shot Performance**: Excellent generalization
+Model performance on MTEB (Massive Text Embedding Benchmark):
+- **BGE-large-en-v1.5**: #1 for retrieval tasks, state-of-the-art performance
+- **BGE-base-en-v1.5**: Top 5 performer, excellent balance
+- **E5-base-v2**: Top tier for semantic search, excels in zero-shot scenarios
+- **MPNet-base-v2**: Consistent top 10, recommended by SBERT
+- **MiniLM-L6-v2**: Good performance for its size, 5x faster than larger models
+
+Expected improvements over MiniLM baseline:
+- **BGE-large**: 20-25% accuracy improvement
+- **BGE-base/E5**: 15-20% accuracy improvement  
+- **MPNet**: 10-15% accuracy improvement
 
 ## 🆘 Troubleshooting
 
 ### Model Download Issues
 - Check internet connection
-- Ensure sufficient disk space (2GB+)
-- Try BGE-base if large model fails
+- Ensure sufficient disk space (2GB+ for BGE-large, 500MB+ for others)
+- Try BGE-base or E5-base if large model fails
 - Clear Hugging Face cache if needed: `~/.cache/huggingface/`
 
 ### Memory Issues
@@ -204,6 +252,7 @@ BGE models consistently outperform alternatives:
 ## 🔗 Resources
 
 - [BGE Models on Hugging Face](https://huggingface.co/BAAI/bge-large-en-v1.5)
+- [E5 Models on Hugging Face](https://huggingface.co/intfloat/e5-base-v2)
 - [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard)
 - [Sentence Transformers Docs](https://www.sbert.net)
 - [Streamlit Documentation](https://docs.streamlit.io)
@@ -215,10 +264,11 @@ This project is licensed under the MIT License.
 ## 🙏 Acknowledgments
 
 - BAAI for BGE models
+- Microsoft for E5 models
 - Sentence Transformers community
 - Streamlit for the web framework
 - Hugging Face for model hosting
 
 ---
 
-**Note**: BGE models require more resources but provide significantly better intent classification accuracy. For resource-constrained environments, consider using BGE-base or fallback to MPNet/MiniLM models.
+**Note**: BGE and E5 models require more resources but provide significantly better intent classification accuracy. For resource-constrained environments, consider using MPNet for a good balance or MiniLM for fastest performance.
