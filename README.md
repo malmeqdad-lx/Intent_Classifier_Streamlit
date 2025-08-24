@@ -186,7 +186,7 @@ An AI-powered intent classification app using state-of-the-art BGE (BAAI General
 ```
 ├── app.py                     # Main application with BGE support
 ├── requirements.txt           # Python dependencies
-├── vanguard_intents.json     # Intent definitions
+├── app_intents.json     # Intent definitions
 ├── .streamlit/
 │   └── config.toml           # Streamlit configuration
 ├── .devcontainer/

@@ -134,7 +134,7 @@ def load_model(model_name: str) -> SentenceTransformer:
 @st.cache_data(show_spinner="Loading intent definitions...")
 def load_intents(file_modified_time: float = None) -> Dict[str, str]:
     """Load intents from file with caching based on file modification time"""
-    INTENTS_FILE = 'vanguard_intents.json'
+    INTENTS_FILE = 'app_intents.json'
     
     if os.path.exists(INTENTS_FILE):
         with open(INTENTS_FILE, 'r') as f:
@@ -293,7 +293,8 @@ def main():
             model = st.session_state['model']
         
         # Get file modification time for cache busting
-        intents_file = 'vanguard_intents.json'
+        intents_file = 'app_intents.json'
+        file_mod_time = os.path.getmtime(intents_file) if os.path.exists(intents_file) else 0
         file_mod_time = os.path.getmtime(intents_file) if os.path.exists(intents_file) else 0
         
         # Load intents with file modification time as cache key
@@ -575,7 +576,7 @@ def main():
                         intents[new_intent_name] = new_intent_desc
                         
                         # Save to file
-                        with open('vanguard_intents.json', 'w') as f:
+                        with open('app_intents.json', 'w') as f:
                             json.dump(intents, f, indent=2)
                         
                         # Clear caches and reload
@@ -666,7 +667,7 @@ def main():
                                     intents[intent_name] = new_desc
                                     
                                     # Save to file
-                                    with open('vanguard_intents.json', 'w') as f:
+                                    with open('app_intents.json', 'w') as f:
                                         json.dump(intents, f, indent=2)
                                     
                                     # Clear all caches to force reload
@@ -684,7 +685,7 @@ def main():
                                     del intents[intent_name]
                                     
                                     # Save to file
-                                    with open('vanguard_intents.json', 'w') as f:
+                                    with open('app_intents.json', 'w') as f:
                                         json.dump(intents, f, indent=2)
                                     
                                     # Clear caches
@@ -771,7 +772,7 @@ def main():
                             action = f"merged ({added} new added) with"
                         
                         # Save to file
-                        with open('vanguard_intents.json', 'w') as f:
+                        with open('app_intents.json', 'w') as f:
                             json.dump(intents, f, indent=2)
                         
                         # Clear caches
@@ -807,7 +808,7 @@ def main():
                 # Show what's in the file
                 st.markdown("**Description in File:**")
                 try:
-                    with open('vanguard_intents.json', 'r') as f:
+                    with open('app_intents.json', 'r') as f:
                         file_intents = json.load(f)
                         file_desc = file_intents.get(debug_intent, "Not found in file")
                         st.info(file_desc)
