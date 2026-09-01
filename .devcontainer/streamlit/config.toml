@@ -1,0 +1,53 @@
+[server]
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 200
+headless = true
+# Safari-specific fixes
+allowRunOnSave = false
+runOnSave = false
+fileWatcherType = "none"
+# Disable problematic features for Safari
+enableStaticServing = true
+
+[browser]
+gatherUsageStats = false
+# Safari-specific browser settings
+serverAddress = "localhost"
+serverPort = 8501
+
+[theme]
+# Dark mode friendly theme with better contrast
+base = "dark"
+primaryColor = "#FF4B4B"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#262730"
+textColor = "#FAFAFA"
+font = "sans-serif"
+
+[logger]
+level = "info"
+
+[client]
+# Safari compatibility settings
+caching = true
+displayEnabled = true
+showErrorDetails = true
+
+# Safari WebSocket settings
+[global]
+# Disable features that cause Safari issues
+suppressDeprecationWarnings = true
+showWarningOnDirectExecution = false
+
+# Safari-specific development settings
+[runner]
+# Disable features that can cause Safari compatibility issues
+magicEnabled = false
+fastReruns = false
+
+# Enhanced accessibility settings
+[accessibility]
+# Better contrast and readability
+highContrast = true
+reducedMotion = false

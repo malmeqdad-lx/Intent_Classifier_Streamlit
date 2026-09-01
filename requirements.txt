@@ -1,0 +1,55 @@
+# Core Framework
+streamlit>=1.39.0
+
+# AI/ML Dependencies - Enhanced for BGE models
+sentence-transformers>=3.3.1
+transformers>=4.46.3
+
+# CRITICAL: CPU-only torch for Streamlit Cloud (no GPU)
+# Remove the +cpu suffix if you have GPU available
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+
+# Tokenizers for transformer models
+tokenizers>=0.20.3
+
+# Core Scientific Computing
+numpy>=1.26.4
+scipy>=1.14.1
+scikit-learn>=1.5.2
+
+# Data handling
+pandas>=2.2.3
+
+# Hugging Face Ecosystem - Required for BGE models
+huggingface-hub>=0.26.5
+safetensors>=0.4.5
+accelerate>=0.27.0  # For optimized model loading
+
+# Performance monitoring
+psutil>=6.1.0
+
+# Progress bars
+tqdm>=4.67.1
+
+# HTTP requests
+requests>=2.32.3
+
+# Image processing (required by some models)
+pillow>=11.0.0
+
+# Utilities
+packaging>=24.2
+filelock>=3.16.1
+fsspec>=2024.10.0
+
+# Type checking
+typing-extensions>=4.12.2
+
+# Environment variables (for future API keys)
+python-dotenv>=1.0.1
+
+# Optional: For better memory management with large models
+# Uncomment if you experience memory issues
+# py-cpuinfo>=9.0.0
+# memory-profiler>=0.61.0
